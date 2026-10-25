@@ -134,7 +134,7 @@ static const char* default_cfg =
 		"\t\t</midi>\n"
 		"\t\t<speech>\n\t\t\t<enabled>\n\t\t\tyes\n\t\t\t</enabled>\n\t\t</speech>\n"
 		"\t</audio>\n"
-		"\t<gameplay>\n\t\t<skip_splash>\n\t\tyes\n\t\t</skip_splash>\n\t\t<fonts>\n\t\tmodern\n\t\t</fonts>\n\t</gameplay>\n"
+		"\t<gameplay>\n\t\t<skip_splash>\n\t\tyes\n\t\t</skip_splash>\n\t\t<fonts>\n\t\tmodern\n\t\t</fonts>\n\t\t<textbackground>\n\t\t15\n\t\t</textbackground>\n\t</gameplay>\n"
 		"</config>\n";
 
 static FILE*      log_file = nullptr;
@@ -242,7 +242,8 @@ static bool file_exists(const char* p) {
 static void migrate_cfg() {
 	const bool v2 = !file_exists(N3DS_HOME "/.cfg-v2");    // hold-to-walk, game speed
 	const bool v3 = !file_exists(N3DS_HOME "/.cfg-v3");    // modern fonts
-	if (!v2 && !v3) {
+	const bool v4 = !file_exists(N3DS_HOME "/.cfg-v4");    // dark box behind conversation text
+	if (!v2 && !v3 && !v4) {
 		return;
 	}
 	FILE* f = fopen(N3DS_HOME "/exult.cfg", "rb");
@@ -288,13 +289,28 @@ static void migrate_cfg() {
 			}
 		}
 	}
+	if (v4) {    // Exult's "text background": 15 = dark grey, translucent
+		const size_t a = cfg.find("<textbackground>"), b = cfg.find("</textbackground>");
+		if (a != std::string::npos && b != std::string::npos && b > a) {
+			if (atoi(cfg.c_str() + a + 16) < 0) {
+				cfg.replace(a + 16, b - a - 16, "15");
+				changed = true;
+			}
+		} else {
+			const size_t g = cfg.find("</gameplay>");
+			if (g != std::string::npos) {
+				cfg.insert(g, "<textbackground>15</textbackground>\n  ");
+				changed = true;
+			}
+		}
+	}
 	if (changed) {
 		if (FILE* o = fopen(N3DS_HOME "/exult.cfg", "wb")) {
 			fwrite(cfg.data(), 1, cfg.size(), o);
 			fclose(o);
 		}
 	}
-	for (const char* marker : {N3DS_HOME "/.cfg-v2", N3DS_HOME "/.cfg-v3"}) {
+	for (const char* marker : {N3DS_HOME "/.cfg-v2", N3DS_HOME "/.cfg-v3", N3DS_HOME "/.cfg-v4"}) {
 		if (FILE* m = fopen(marker, "w")) {
 			fclose(m);
 		}

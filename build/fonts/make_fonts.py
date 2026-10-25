@@ -10,6 +10,7 @@ Output: a 22-entry font flex with the same layout as fonts_serif.vga; the
         and the small book/label fonts are kept as they are.
 
 usage: make_fonts.py fonts_serif.vga DejaVuSans-Bold.ttf fonts_modern.vga
+       make_fonts.py fonts_serif.vga pixel fonts_modern.vga   (U7 Pixel Sans)
 """
 import struct, sys
 from PIL import Image, ImageDraw, ImageFont
@@ -41,10 +42,33 @@ def glyph(font, ch):
     img = [r[:width] for r in img]
     return encode_frame(img, 0, YA)
 
+def pixel_glyph(rows):
+    """Frame from a hand-drawn U7 Pixel Sans glyph (rows 0..10, baseline row 8)."""
+    inkw = len(rows[0])
+    w, h = inkw + 3, YA + YB + 1          # outline | ink | outline | gap
+    on = [[False] * w for _ in range(h)]
+    for gy, r in enumerate(rows):
+        for gx, c in enumerate(r):
+            if c == '#':
+                on[gy + 2][gx + 1] = True   # glyph row 8 -> frame row 10 (baseline)
+    img = [[None] * w for _ in range(h)]
+    for y in range(h):
+        for x in range(w):
+            if on[y][x]:
+                img[y][x] = FILL
+            elif any(0 <= y + dy < h and 0 <= x + dx < w and on[y + dy][x + dx]
+                     for dy in (-1, 0, 1) for dx in (-1, 0, 1)):
+                img[y][x] = OUTLINE
+    return encode_frame(img, 0, YA)
+
 def main(src, ttf, dst):
     d = open(src, 'rb').read()
     E = flex_entries(d)
-    font = ImageFont.truetype(ttf, PX)
+    pixel = ttf == 'pixel'                # hand-drawn U7 Pixel Sans instead of a TTF
+    if pixel:
+        from u7pixel_glyphs import G
+    else:
+        font = ImageFont.truetype(ttf, PX)
     out = []
     for i, (o, l) in enumerate(E):
         blob = d[o:o + l]
@@ -54,7 +78,7 @@ def main(src, ttf, dst):
             for code in range(len(old)):
                 ch = chr(code)
                 if 32 <= code < 127:
-                    frames.append(glyph(font, ch))
+                    frames.append(pixel_glyph(G[ch]) if pixel else glyph(font, ch))
                 else:   # keep Exult's glyph (bullets etc.) but drop the yellow
                     f = old[code]
                     if f:

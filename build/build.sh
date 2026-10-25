@@ -41,7 +41,8 @@ docker run --rm -v "$W":/w devkitpro/devkitarm bash -ec '
 cp "$W/exult/exult.3dsx" "$HERE/out/"
 for f in exult.flx exult_bg.flx exult_si.flx fonts_original.vga fonts_serif.vga shortcutbar.vga midisfx.flx; do
   cp "$W/exult/data/$f" "$HERE/out/data/"; done
-# Modern fonts (DejaVu Sans Bold over Exult's serif font set). Prebuilt;
-# regenerate with: python3 fonts/make_fonts.py <exult>/data/fonts_serif.vga DejaVuSans-Bold.ttf fonts/fonts_modern.vga
+# Modern fonts: U7 Pixel Sans (hand-drawn for the 3DS screen, fonts/u7pixel_glyphs.py)
+# over Exult's serif font set. Prebuilt; regenerate with:
+#   python3 fonts/make_fonts.py <exult>/data/fonts_serif.vga pixel fonts/fonts_modern.vga
 cp "$HERE/fonts/fonts_modern.vga" "$HERE/out/data/"
 echo "Built: $HERE/out/exult.3dsx"

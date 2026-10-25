@@ -10,7 +10,7 @@ The original game was played with a mouse. This port is built for the stylus:
   - large dialogue buttons;
   - an action bar;
   - a minimap with tap-to-walk.
-- **Readable text:** modern, clean lettering (light grey with a black outline) replaces the original blackletter and its yellow.
+- **Readable text:** a pixel font drawn for the 3DS screen replaces the original blackletter and its yellow. It's light grey with a black outline, and conversations get a dark box behind them, like TV subtitles.
 - **Stereoscopic 3D:** the 3D slider gives the world real depth. Roofs, trees and walls rise out of the screen.
 - **Install and update over Wi-Fi** from a Windows PC. There's no need to take the SD card out, and saves can sync both ways with Exult on the PC.
 
@@ -140,7 +140,8 @@ Option **6** in `Exult-3DS.cmd` syncs saves both ways with Exult on the PC:
 - **Music and sound:** OPL synth music, mono, 22 kHz. The digital OGG soundtrack is off to save CPU.
 - **CPU:** the New 3DS's 804 MHz mode and L2 cache are on.
 - **Intro:** the splash intro is skipped. View Introduction is still in the game menu.
-- **Fonts:** `modern`, which is DejaVu Sans Bold in light grey with a black outline. It applies to conversations, names, labels and the bottom screen. Runic and Ophidian writing on signs stays in its original script. You can switch to Exult's Original or Serif fonts in the game's Display options.
+- **Fonts:** `modern`. This is U7 Pixel Sans, a font drawn pixel by pixel for this screen: capitals are 9 px tall and lowercase 6 px, in light grey with a black outline. It applies to conversations, names, labels and the bottom screen. Runic and Ophidian writing on signs stays in its original script. You can switch to Exult's Original or Serif fonts in the game's Display options.
+- **Text background:** a dark, translucent box behind conversation text (Exult's `textbackground` setting, set to 15, dark grey). Turn it off in Display options.
 - **Log:** `sdmc:/3ds/exult/exult.log`, with every line timestamped.
 
 ## Building
@@ -160,7 +161,7 @@ What's in the source:
 | `build/3ds/n3ds_platform.cc` | Heap setup, paths, default config, logging, crash diagnostics, `glob()` |
 | `build/3ds/n3ds_bottom.cc` | The bottom-screen companion: live view, party strip, dialogue, action bar, minimap, zoom, drag-to-portrait, target cycling, autosave |
 | `build/3ds/n3ds_stereo.cc` | Stereoscopic 3D: height map and right-eye re-projection |
-| `build/fonts/` | `make_fonts.py` builds `fonts_modern.vga` from Exult's serif font set and DejaVu Sans Bold. The prebuilt file is included. |
+| `build/fonts/` | `u7pixel_glyphs.py` is the hand-drawn pixel font, and `make_fonts.py` builds `fonts_modern.vga` from it and Exult's serif font set. The prebuilt file is included. |
 | `build/patches/exult-3ds.patch` | Hooks into Exult: RAM-cached file loading, 3D height stamping, frame and touch hooks, small accessors, fixes |
 | `build/patches/sdl3-n3ds-virtual-input.patch` | SDL3's 3DS backend: buttons, sticks and touch become a virtual mouse and keyboard; stereo output; frame and touch hooks for the app |
 
@@ -170,5 +171,4 @@ What's in the source:
 
 - **Exult:** © the Exult Team, GPL v2. This port is GPL v2 as well (see `LICENSE`).
 - **SDL3:** zlib license.
-- **DejaVu fonts:** Bitstream Vera / DejaVu license. They're used for the modern text font.
 - **Ultima VII:** © Electronic Arts. Its data isn't included and isn't distributed here.

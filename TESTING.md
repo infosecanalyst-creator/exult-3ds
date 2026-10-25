@@ -2,6 +2,14 @@
 
 Notes from development and testing. The build is tested in the Azahar emulator (New 3DS mode), with real-hardware results added as they come in.
 
+## Readability: pixel font and text background (Oct 25)
+- Three options were compared on the same conversation:
+  - A: DejaVu Sans Bold, the previous version.
+  - B: U7 Pixel Sans, hand-drawn with 9 px capitals and a 6 px x-height in a 14 px line, so every stroke sits on the pixel grid.
+  - C: U7 Pixel Sans plus Exult's dark text background.
+- C was chosen and is the default.
+- Existing configs switch to the dark text background once (marker file `.cfg-v4`, `textbackground` set to 15). Checked in the emulator, starting from `-1`.
+
 ## Modern fonts (Oct 25)
 - The yellow blackletter text fonts (Exult fonts 0 and 7) are replaced by DejaVu Sans Bold 10 px, in palette colour 118 (236,236,236) with a black outline. The 14 px line height and the baseline are unchanged, so Exult's text layouts still fit. Bullets and other special characters were recoloured as well.
 - Checked in the emulator: Iolo's conversation, the topic keywords, the answer buttons on the bottom screen, and item names.
