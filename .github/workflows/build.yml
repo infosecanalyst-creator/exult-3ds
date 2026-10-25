@@ -2,13 +2,21 @@ name: Build
 
 # Builds exult.3dsx with devkitARM (in Docker, via build/build.sh) on every
 # push. Each run uploads the ready-to-use folder (SD layout + Wi-Fi installer)
-# as an artifact; pushing a tag like v0.1.0 also publishes a GitHub Release.
+# as an artifact. A GitHub Release is published when a tag like v0.1.0 is
+# pushed, or from the Actions tab: "Run workflow" with a version filled in
+# (GitHub creates the tag). Versions with a suffix (v0.1.0-rc1) are marked
+# pre-release.
 on:
   push:
     branches: [main]
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Publish a release with this version (e.g. v0.1.0). Leave empty to just build.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -37,14 +45,15 @@ jobs:
           name: exult-3ds-${{ github.sha }}
           path: dist/
 
-      - name: Publish release (tags only)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.version != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version != '' && inputs.version || github.ref_name }}
         run: |
           cd dist
-          zip -r "exult-3ds-${GITHUB_REF_NAME}.zip" exult-3ds
+          zip -r "exult-3ds-${VERSION}.zip" exult-3ds
           pre=""
-          case "$GITHUB_REF_NAME" in *-*) pre="--prerelease" ;; esac   # v0.1.0-rc1 etc.
-          gh release create "$GITHUB_REF_NAME" "exult-3ds-${GITHUB_REF_NAME}.zip" $pre \
-            --title "Exult for New 3DS ${GITHUB_REF_NAME}" --generate-notes
+          case "$VERSION" in *-*) pre="--prerelease" ;; esac   # v0.1.0-rc1 etc.
+          gh release create "$VERSION" "exult-3ds-${VERSION}.zip" $pre --target "$GITHUB_SHA" \
+            --title "Exult for New 3DS ${VERSION}" --generate-notes
