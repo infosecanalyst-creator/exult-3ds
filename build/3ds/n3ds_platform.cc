@@ -172,6 +172,15 @@ static ssize_t log_write(struct _reent*, void*, const char* ptr, size_t len) {
 	return static_cast<ssize_t>(len);
 }
 
+// Push buffered log lines to the SD card (called every few seconds from
+// the bottom-screen tick, so a quiet log still lands on the card).
+extern "C" void n3ds_log_flush() {
+	if (log_file) {
+		fflush(log_file);
+		log_last_flush = osGetTime();
+	}
+}
+
 static void install_log() {
 	devoptab_list[STD_OUT] = &log_dotab;
 	devoptab_list[STD_ERR] = &log_dotab;

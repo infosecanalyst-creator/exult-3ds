@@ -40,12 +40,16 @@ When you're playing, the bottom screen becomes part of the game:
 - **Party strip (top):**
   - Shows a portrait of each party member with health (red) and mana (blue) bars.
   - A portrait flashes red when that member is hit and green when poisoned.
+  - **Status tags** on a portrait: PSN poisoned, FOOD hungry, STRV starving, ZZ asleep, PAR paralyzed, CHM charmed.
+  - The spare space beside the portraits spells out what needs attention, for example "Iolo is hungry" or "Shamino is badly hurt", or shows "Party OK".
   - **Tap a portrait** to open that member's inventory.
+  - **Drag an item onto a portrait to give it to that member.** Their inventory opens on the top screen and the item goes in when you let go. The usual weight and theft rules apply.
 - **Middle area: a live picture of the top screen.** Tap what you see:
   - **Tap** clicks that spot, the same as clicking with a mouse.
   - **Double-tap** uses or talks to something.
   - **Drag** moves items.
   - **Hold the stylus still** for half a second and the Avatar walks there.
+  - **Hold L** to zoom the picture 2x around the cursor, for precise taps on small things like items in a backpack.
 - **Info column** (right of the picture):
   - Shows the day and time, and COMBAT in red while you're fighting.
   - Shows **what the cursor is on**: a person's name with their health bar, or an item's name and how many there are. This works inside open backpacks too.
@@ -77,6 +81,8 @@ With the slider all the way down, it's switched off and costs nothing. When it's
 | Tap the picture (middle area) | Click there |
 | Double-tap the picture | Use / talk |
 | Hold the stylus still | Walk there |
+| Hold L while tapping | 2x zoom of the picture |
+| Drag an item onto a portrait | Give it to that party member |
 | Drag on the picture | Move items |
 | **map** button, then tap | Minimap: walk to the tapped spot |
 | 3D slider | Stereoscopic 3D depth (off at the bottom) |
@@ -163,6 +169,11 @@ I compared the interface with stylus-driven DS/3DS games, mouse-driven CRPGs, an
   - Walking anywhere is now one gesture: hold the stylus still. It uses Exult's touch path-finding, the same as the phone versions.
   - Identifying something no longer needs a separate window: the info column shows names, health and item counts as soon as the cursor touches them.
 - Older configs are updated once, at the first launch of this build, to turn hold-to-walk on.
+- **Round two:**
+  - Drag items onto party portraits.
+  - Hold L to zoom.
+  - Status tags and plain-English alerts in the party strip.
+  - The bottom screen now also updates while the game is paused, for example with an inventory open. Before this, it froze until something moved on the top screen.
 
 ## Fixes from the first hardware run (Oct 25)
 - **The Avatar couldn't move.** My default config set Exult's `fps` to 30. In Exult that setting is the game speed, not the display frame rate: 5 is normal, so 30 ran the game six times too fast. Opening Exult's Game Engine options then saved a garbage value, which froze the game timer.
