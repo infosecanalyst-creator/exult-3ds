@@ -67,6 +67,7 @@
 #endif
 
 extern "C" void N3DS_SetCursor(float x, float y);
+extern "C" void n3ds_log_flush();
 
 namespace {
 	constexpr int W = 320;
@@ -111,6 +112,16 @@ namespace {
 	uint16_t            view_px[PAD_H * VIEW_W];    // RGB565, filled from the top screen
 	bool                view_new      = false;
 	uint64_t            view_last     = 0;
+	// Hold L: the live view zooms 2x around where the cursor was, for
+	// precise taps on small things (items in backpacks).
+	bool                zoom_on       = false;
+	int                 zoom_x0 = 0, zoom_y0 = 0;
+	constexpr int       ZOOM_W = 200, ZOOM_H = 120;
+	// Dragging an item onto a party portrait: that member's inventory opens
+	// on the top screen and the cursor moves onto it, so letting go drops the
+	// item there (Exult's own rules for weight, theft and equipping apply).
+	int                 drop_member   = -1;
+	int                 party_count   = 0;
 	unsigned char       C_BG, C_PANEL, C_PANEL_HI, C_EDGE, C_RED, C_BLUE, C_GREEN, C_DIM, C_TEXT;
 
 	unsigned char nearest(int r, int g, int b) {
@@ -310,8 +321,68 @@ namespace {
 			if (a->get_effective_prop(Actor::magic) > 0) {
 				bar(sx + 4, PARTY_Y + 40, slot - 8, a->get_effective_prop(Actor::mana), a->get_effective_prop(Actor::magic), C_BLUE);
 			}
+			// Status tag in the portrait's corner.
+			const char*   tag = nullptr;
+			unsigned char tc  = C_TEXT;
+			const int     food = a->get_property(static_cast<int>(Actor::food_level));
+			const bool    eats = !a->get_info().does_not_eat();
+			if (a->get_flag(Obj_flags::paralyzed)) {
+				tag = "PAR"; tc = C_RED;
+			} else if (a->get_flag(Obj_flags::asleep)) {
+				tag = "ZZ"; tc = C_BLUE;
+			} else if (a->get_flag(Obj_flags::poisoned)) {
+				tag = "PSN"; tc = C_GREEN;
+			} else if (a->get_flag(Obj_flags::charmed)) {
+				tag = "CHM"; tc = C_RED;
+			} else if (eats && food <= 9) {
+				tag = food <= 0 ? "STRV" : "FOOD"; tc = C_RED;
+			}
+			if (tag) {
+				buf->fill8(tc, 22, 9, sx + 2, PARTY_Y + 23);
+				text(5, tag, sx + 3, PARTY_Y + 24);
+			}
+			if (drop_member == static_cast<int>(i)) {    // item being dragged here
+				buf->fill8(C_TEXT, slot - 2, 2, sx + 1, PARTY_Y + 1);
+				buf->fill8(C_TEXT, slot - 2, 2, sx + 1, PARTY_Y + PARTY_H - 3);
+			}
 			// Tap = inventory of party member i (Exult binds keys 1-8 to this)
 			hits.push_back({sx, PARTY_Y, slot, PARTY_H, static_cast<SDL_Keycode>(SDLK_1 + i), SDL_KMOD_NONE, id});
+		}
+		party_count = static_cast<int>(members.size());
+
+		// Spare room in the strip: spell out what needs attention.
+		const int free_x = party_count * slot + 4;
+		if (free_x < W - 60) {
+			std::vector<std::string> alerts;
+			for (Actor* a : members) {
+				const std::string n    = a->get_name();
+				const int         food = a->get_property(static_cast<int>(Actor::food_level));
+				const int         hp = a->get_effective_prop(Actor::health), maxhp = a->get_effective_prop(Actor::strength);
+				if (a->get_flag(Obj_flags::poisoned)) {
+					alerts.push_back(n + " is poisoned");
+				}
+				if (a->get_flag(Obj_flags::paralyzed)) {
+					alerts.push_back(n + " is paralyzed");
+				}
+				if (!a->get_info().does_not_eat() && food <= 9) {
+					alerts.push_back(n + (food <= 0 ? " is starving" : " is hungry"));
+				}
+				if (maxhp > 0 && hp * 4 <= maxhp) {
+					alerts.push_back(n + " is badly hurt");
+				}
+			}
+			if (alerts.empty()) {
+				text(5, "Party OK", free_x + 2, PARTY_Y + 4);
+			}
+			int y = PARTY_Y + 4;
+			for (size_t k = 0; k < alerts.size() && k < 4; k++, y += 10) {
+				std::string t = alerts[k];
+				auto        f = font(5);
+				while (f && t.size() > 3 && f->get_text_width(t.c_str()) > W - free_x - 4) {
+					t.pop_back();
+				}
+				text(5, t.c_str(), free_x + 2, y);
+			}
 		}
 	}
 
@@ -511,8 +582,8 @@ namespace {
 										  "ZL keys   ZR target   START menu   SELECT save",
 										  "Hold L + D-Pad: Watch Pause Lockpick Food",
 										  "L+SELECT quick-restore   L+X next song",
-										  "map: minimap, tap to walk   Portrait: inventory",
-										  "3D slider: depth (off at the bottom)"};
+										  "Portrait: inventory. Drag an item onto it: give",
+										  "Hold L: zoom x2   map: minimap   3D slider: depth"};
 			int y = PAD_Y + 6;
 			for (const char* l : lines) {
 				text(5, l, 6, y);
@@ -535,7 +606,10 @@ namespace {
 			std::snprintf(tbuf, sizeof tbuf, "%d:%02d %s", h % 12 == 0 ? 12 : h % 12, clk->get_minute(), h < 12 ? "AM" : "PM");
 			text(5, tbuf, sx, PAD_Y + 14);
 		}
-		if (gwin->in_combat()) {
+		if (zoom_on) {
+			buf->fill8(C_BLUE, sw, 11, sx - 1, PAD_Y + 26);
+			text(5, "ZOOM x2 (L)", sx + 1, PAD_Y + 28);
+		} else if (gwin->in_combat()) {
 			buf->fill8(C_RED, sw, 11, sx - 1, PAD_Y + 26);
 			text(5, Combat::is_paused() ? "COMBAT-PAUSED" : "COMBAT", sx + 1, PAD_Y + 28);
 		}
@@ -720,6 +794,19 @@ extern "C" void N3DS_TopFrame(const void* src, int sw, int sh, int pitch, int bp
 	}
 	view_last = now;
 	const auto* base = static_cast<const uint8_t*>(src);
+	if (zoom_on) {    // 2x around the frozen zoom point: plain upscale
+		for (int ty = 0; ty < PAD_H; ty++) {
+			const int       sy  = std::min(zoom_y0 + ty * ZOOM_H / PAD_H, sh - 1);
+			const uint32_t* r0  = reinterpret_cast<const uint32_t*>(base + static_cast<size_t>(sy) * pitch);
+			uint16_t*       out = view_px + ty * VIEW_W;
+			for (int tx = 0; tx < VIEW_W; tx++) {
+				const uint32_t a = r0[std::min(zoom_x0 + tx * ZOOM_W / VIEW_W, sw - 1)];
+				out[tx] = static_cast<uint16_t>(((a >> 27) << 11) | (((a >> 18) & 63) << 5) | ((a >> 11) & 31));
+			}
+		}
+		view_new = true;
+		return;
+	}
 	for (int ty = 0; ty < PAD_H; ty++) {
 		const int       sy = std::min(ty * sh / PAD_H, sh - 2);
 		const uint32_t* r0 = reinterpret_cast<const uint32_t*>(base + static_cast<size_t>(sy) * pitch);
@@ -749,6 +836,19 @@ void n3ds_bottom_init() {
 	gfxSetDoubleBuffering(GFX_BOTTOM, false);
 }
 
+void n3ds_bottom_tick();
+
+// Called by SDL's input polling: keeps the bottom screen alive while the game
+// is paused (an open inventory pauses Ultima VII, so no frames are drawn).
+extern "C" void N3DS_InputTick() {
+	static bool busy = false;    // never re-enter (the tick can pump events)
+	if (!busy) {
+		busy = true;
+		n3ds_bottom_tick();
+		busy = false;
+	}
+}
+
 // Called after every frame is presented on the top screen.
 void n3ds_bottom_tick() {
 	n3ds::stereo_tick();
@@ -757,10 +857,62 @@ void n3ds_bottom_tick() {
 		return;    // still in Exult's menus: the console legend stays up
 	}
 	const uint64_t now = SDL_GetTicks();
+	{
+		static uint64_t last_flush = 0;
+		if (now - last_flush > 2000) {
+			n3ds_log_flush();
+			last_flush = now;
+		}
+	}
 	if (pending_cycle != 0) {
 		const int dir = pending_cycle > 0 ? 1 : -1;
 		pending_cycle = 0;
 		do_cycle(gwin, dir);
+	}
+	// Zoom: L held freezes a 2x window around the cursor.
+	{
+		const bool l_held = (hidKeysHeld() & KEY_L) != 0;
+		if (l_held && !zoom_on) {
+			Mouse*    m  = Mouse::mouse();
+			const int cx = m ? m->get_mousex() : 200, cy = m ? m->get_mousey() : 120;
+			zoom_x0      = std::clamp(cx - ZOOM_W / 2, 0, gwin->get_width() - ZOOM_W);
+			zoom_y0      = std::clamp(cy - ZOOM_H / 2, 0, gwin->get_height() - ZOOM_H);
+			zoom_on      = true;
+			view_last    = 0;
+			last_draw    = 0;
+		} else if (!l_held && zoom_on) {
+			zoom_on   = false;
+			view_last = 0;
+			last_draw = 0;
+		}
+	}
+	// Item dragged onto a portrait: open that member's inventory and park
+	// the cursor on it.
+	if (drop_member >= 0) {
+		if (!gwin->is_dragging()) {
+			drop_member = -1;
+		} else {
+			Actor* a = drop_member == 0 ? gwin->get_main_actor() : nullptr;
+			if (drop_member > 0) {
+				Party_manager* pm = gwin->get_party_man();
+				if (pm && drop_member - 1 < pm->get_count()) {
+					a = gwin->get_npc(pm->get_member(drop_member - 1));
+				}
+			}
+			Gump_manager* gm = gwin->get_gump_man();
+			if (a && gm) {
+				const int shp = a->inventory_shapenum();
+				Gump*     g   = gm->find_gump(a, shp);
+				if (!g) {
+					gm->add_gump(a, shp, true);
+					g = gm->find_gump(a, shp);
+				}
+				if (g) {
+					const TileRect r = g->get_rect();
+					N3DS_SetCursor(static_cast<float>(r.x + r.w / 2), static_cast<float>(r.y + r.h / 2));
+				}
+			}
+		}
 	}
 	if (pending_tx >= 0) {
 		travel_to(gwin, pending_tx, pending_ty);
@@ -864,8 +1016,37 @@ extern "C" int N3DS_BottomTouch(int phase, int x, int y, float* nx, float* ny) {
 		}
 		return 1;
 	}
+	// A drag that started in the live view and is now over a portrait.
+	if (phase == 1 && y < PAD_Y) {
+		Game_window* gwin = Game_window::get_instance();
+		const int    slot = x / (W / 8);
+		if (gwin && gwin->is_dragging() && slot < party_count) {
+			if (drop_member != slot) {
+				drop_member = slot;
+				last_draw   = 0;
+			}
+			return 2;    // keep the button down; the tick steers the cursor
+		}
+	}
+	if (phase == 2 && drop_member >= 0) {
+		drop_member = -1;    // released over the portrait: drop where the cursor is
+		last_draw   = 0;
+		return 2;
+	}
+	if (drop_member >= 0) {    // dragged back into the view
+		drop_member = -1;
+		last_draw   = 0;
+	}
 	float fx = x / static_cast<float>(VIEW_W), fy = (y - PAD_Y) / static_cast<float>(PAD_H);
-	*nx      = fx < 0 ? 0 : fx > 1 ? 1 : fx;
-	*ny      = fy < 0 ? 0 : fy > 1 ? 1 : fy;
+	fx       = fx < 0 ? 0 : fx > 1 ? 1 : fx;
+	fy       = fy < 0 ? 0 : fy > 1 ? 1 : fy;
+	if (zoom_on) {
+		Game_window* gwin = Game_window::get_instance();
+		const float  gw = gwin ? gwin->get_width() : 400.0f, gh = gwin ? gwin->get_height() : 240.0f;
+		fx              = (zoom_x0 + fx * ZOOM_W) / gw;
+		fy              = (zoom_y0 + fy * ZOOM_H) / gh;
+	}
+	*nx = fx;
+	*ny = fy;
 	return 0;
 }

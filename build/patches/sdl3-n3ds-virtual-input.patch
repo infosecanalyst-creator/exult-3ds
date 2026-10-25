@@ -145,10 +145,10 @@ index dd54a4c..33b4533 100644
  bool N3DS_StopTextInput(SDL_VideoDevice *_this, SDL_Window *window)
 diff --git a/src/video/n3ds/SDL_n3dsvinput.c b/src/video/n3ds/SDL_n3dsvinput.c
 new file mode 100644
-index 0000000..13e6c75
+index 0000000..494bb4d
 --- /dev/null
 +++ b/src/video/n3ds/SDL_n3dsvinput.c
-@@ -0,0 +1,255 @@
+@@ -0,0 +1,268 @@
 +/*
 +  Exult-3DS virtual input layer for SDL3's N3DS backend.
 +
@@ -223,7 +223,9 @@ index 0000000..13e6c75
 +    SDL_SendMouseMotion(0, win, VIN_MOUSE_ID, false, cursor_x, cursor_y);
 +}
 +
-+/* Default: whole bottom screen is a touchpad. Exult-3DS overrides this. */
++/* Default: whole bottom screen is a touchpad. Exult-3DS overrides this.
++   Return 0 = move the cursor to nx/ny, 1 = touch belongs to the app's UI,
++   2 = keep the button down but leave the cursor where the app put it. */
 +__attribute__((weak)) int N3DS_BottomTouch(int phase, int x, int y, float *nx, float *ny)
 +{
 +    (void)phase;
@@ -232,6 +234,12 @@ index 0000000..13e6c75
 +    return 0;
 +}
 +static Uint32 l_layer_used = 0;
++
++/* Default: nothing. Exult-3DS runs its bottom-screen UI from here too, so it
++   keeps working while the game is paused and no frames are being drawn. */
++__attribute__((weak)) void N3DS_InputTick(void)
++{
++}
 +
 +static SDL_Window *TopWindow(void)
 +{
@@ -305,15 +313,19 @@ index 0000000..13e6c75
 +        int consumed = N3DS_BottomTouch(phase, touch.px, touch.py, &nx, &ny);
 +        if (!touch_active) {
 +            touch_active = true;
-+            touch_consumed = consumed != 0;
++            touch_consumed = consumed == 1;
 +        }
 +        last_px = touch.px;
 +        last_py = touch.py;
 +        if (!touch_consumed) {
-+            cursor_x = nx * win->w;
-+            cursor_y = ny * win->h;
-+            ClampCursor(win);
-+            SDL_SendMouseMotion(0, win, VIN_MOUSE_ID, false, cursor_x, cursor_y);
++            /* 2 = the app is steering the cursor itself (e.g. dragging an
++               item onto a party portrait): keep the button, skip the move. */
++            if (consumed != 2) {
++                cursor_x = nx * win->w;
++                cursor_y = ny * win->h;
++                ClampCursor(win);
++                SDL_SendMouseMotion(0, win, VIN_MOUSE_ID, false, cursor_x, cursor_y);
++            }
 +            /* Press one frame after the cursor arrives, like a real mouse:
 +               menus highlight on motion and only accept a click on the
 +               hovered item. */
@@ -401,6 +413,7 @@ index 0000000..13e6c75
 +    if (kUp & KEY_L) {
 +        l_layer_used = 0;
 +    }
++    N3DS_InputTick();
 +}
 +
 +#endif /* SDL_VIDEO_DRIVER_N3DS */
