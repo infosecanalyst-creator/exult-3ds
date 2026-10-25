@@ -105,11 +105,12 @@ namespace {
 	std::vector<Hit>    hits;           // rebuilt each draw, read by the touch hook
 	bool                choices_shown = false;
 	int                 answer_page   = 0;
-	bool                show_help     = false;
+	int                 help_page     = -1;       // illustrated guide page, -1 = closed
 	int                 pressed_id    = -1;
 	int                 touch_hit     = -1;    // index into hits for the current UI touch
 	bool                touch_ui      = false;
 	bool                minimap_on    = false;
+	bool                any_tag_now   = false;    // a party status tag is showing
 	bool                view_visible  = false;    // live top-screen picture is showing
 	uint16_t            view_px[PAD_H * VIEW_W];    // RGB565, filled from the top screen
 	bool                view_new      = false;
@@ -302,6 +303,7 @@ namespace {
 			}
 		}
 		const int slot = W / 8;
+		any_tag_now    = false;
 		for (size_t i = 0; i < members.size(); i++) {
 			Actor*    a  = members[i];
 			const int sx = static_cast<int>(i) * slot;
@@ -340,6 +342,7 @@ namespace {
 				tag = food <= 0 ? "STRV" : "FOOD"; tc = C_RED;
 			}
 			if (tag) {
+				any_tag_now = true;
 				buf->fill8(tc, 22, 9, sx + 2, PARTY_Y + 23);
 				text(5, tag, sx + 3, PARTY_Y + 24);
 			}
@@ -541,6 +544,254 @@ namespace {
 			mm_msg = "No way to get there";
 		}
 	}
+
+	// ---- Illustrated guide (the "?" button) and first-time tips ---------------
+	constexpr int GUIDE_PAGES = 8;
+
+	// Miniature of the bottom screen with one area highlighted.
+	// which: 0 none (labels on all), 1 party, 2 picture, 3 info, 4 action bar
+	void draw_schematic(int x0, int y0, int which) {
+		const int w = 112, h = 84;
+		buf->fill8(C_EDGE, w + 2, h + 2, x0 - 1, y0 - 1);
+		struct R {
+			int         x, y, w, h, id;
+			const char* label;
+		};
+		const R parts[] = {{0, 0, w, 16, 1, "Party"},
+						   {0, 16, 79, 48, 2, "Picture"},
+						   {80, 16, w - 80, 48, 3, "Info"},
+						   {0, 64, w, 20, 4, "Actions"}};
+		for (const R& r : parts) {
+			const bool hi = which == r.id;
+			buf->fill8(C_BG, r.w, r.h, x0 + r.x, y0 + r.y);
+			buf->fill8(hi ? C_PANEL_HI : C_PANEL, r.w - 2, r.h - 2, x0 + r.x + 1, y0 + r.y + 1);
+			if (which == 0 || hi) {
+				text_centered(5, r.label, x0 + r.x + r.w / 2, y0 + r.y + r.h / 2 - 4, r.w - 4);
+			}
+		}
+	}
+
+	struct GuidePage {
+		const char* title;
+		int         area;
+		const char* lines[9];
+	};
+
+	const GuidePage guide_pages[GUIDE_PAGES] = {
+			{"Welcome to Ultima VII",
+			 0,
+			 {"The bottom screen is your control panel.",
+			  "Party: portraits, health and problems.",
+			  "Picture: a live copy of the top screen -",
+			  "touch it to play.",
+			  "Info: time, and what you are pointing at.",
+			  "Actions: one-tap commands.",
+			  "Tap Next to learn each part.", nullptr}},
+			{"The live picture",
+			 2,
+			 {"Tap: click there (look, pick, press).",
+			  "Double-tap: use something or talk.",
+			  "Hold the stylus still: walk there.",
+			  "Drag: move items around.",
+			  "Drag onto a portrait: give the item.",
+			  "Hold L: zoom 2x for small things,",
+			  "like items in a backpack.", nullptr}},
+			{"The party strip",
+			 1,
+			 {"Red bar: health. Blue bar: mana.",
+			  "Tap a portrait: open that inventory.",
+			  "Drag an item onto it: give it.",
+			  "Tags: PSN poisoned  FOOD hungry",
+			  "STRV starving  ZZ asleep",
+			  "PAR paralyzed  CHM charmed",
+			  "Spare space lists any problems,",
+			  "or says Party OK.", nullptr}},
+			{"The info column",
+			 3,
+			 {"Day and time; COMBAT while fighting.",
+			  "Name of what the cursor is on, with",
+			  "health for people, counts for items.",
+			  "? opens this guide.",
+			  "map: minimap of the area around you.",
+			  "Tap a spot on it to walk there;",
+			  "tap map again to go back.", nullptr}},
+			{"Talking to people",
+			 2,
+			 {"Double-tap someone to talk.",
+			  "Your answers become big buttons in",
+			  "the middle - tap one to reply.",
+			  "More... shows extra answers.",
+			  "Tap the picture to move the text on.",
+			  "D-Pad left/right jumps the cursor to",
+			  "people nearby; then press X to talk.", nullptr}},
+			{"The action bar",
+			 4,
+			 {"Map: the world map. Spells: spellbook.",
+			  "Notes: your notebook.",
+			  "Keys: try your keys on a lock.",
+			  "Pack: inventory. Combat: on / off.",
+			  "Target: pick something to use it on.",
+			  "Food: feed the party.",
+			  "Save: save or load. Menu: game menu.", nullptr}},
+			{"Buttons",
+			 0,
+			 {"Circle Pad walk    C-Stick cursor",
+			  "A click/drag   B walk to cursor",
+			  "X use/talk     Y inventory",
+			  "D-Pad: up map, down stats,",
+			  "left/right next person or item",
+			  "R combat  ZL keys  ZR target",
+			  "START menu   SELECT quicksave",
+			  "Hold L + D-Pad: watch, pause combat,",
+			  "lockpick, food. L+SELECT: restore"}},
+			{"3D, saving and tips",
+			 0,
+			 {"Push the 3D slider up: roofs, trees",
+			  "and people rise out of the screen.",
+			  "SELECT quicksaves; the game also",
+			  "autosaves every 15 minutes when idle.",
+			  "Journey Onward resumes your game.",
+			  "Tips appear the first time you need",
+			  "them; replay them below.", nullptr}},
+	};
+
+	void draw_guide() {
+		buf->fill8(C_BG, W, H, 0, 0);
+		const GuidePage& pg = guide_pages[help_page];
+		buf->fill8(C_PANEL, W, 20, 0, 0);
+		text(0, pg.title, 8, 5);
+		char pbuf[16];
+		std::snprintf(pbuf, sizeof pbuf, "%d / %d", help_page + 1, GUIDE_PAGES);
+		text(5, pbuf, W - 40, 7);
+		draw_schematic(8, 30, pg.area);
+		int y = 28;
+		for (const char* l : pg.lines) {
+			if (!l) {
+				break;
+			}
+			text(5, l, 128, y);
+			y += 13;
+		}
+		// Navigation
+		const int by = H - 30;
+		if (help_page > 0) {
+			panel(4, by, 70, 26, pressed_id == 280);
+			text_centered(0, "< Back", 39, by + 7);
+			hits.push_back({0, by - 4, 78, 34, SDLK_UNKNOWN, SDL_KMOD_NONE, 280});
+		}
+		if (help_page < GUIDE_PAGES - 1) {
+			panel(W - 74, by, 70, 26, pressed_id == 281);
+			text_centered(0, "Next >", W - 39, by + 7);
+			hits.push_back({W - 78, by - 4, 78, 34, SDLK_UNKNOWN, SDL_KMOD_NONE, 281});
+		} else {
+			panel(W - 110, by, 106, 26, pressed_id == 283);
+			text_centered(5, "Show tips again", W - 57, by + 9);
+			hits.push_back({W - 114, by - 4, 114, 34, SDLK_UNKNOWN, SDL_KMOD_NONE, 283});
+		}
+		panel(W / 2 - 34, by, 68, 26, pressed_id == 282);
+		text_centered(0, "Close", W / 2, by + 7);
+		hits.push_back({W / 2 - 38, by - 4, 76, 34, SDLK_UNKNOWN, SDL_KMOD_NONE, 282});
+	}
+
+	// First-time tips: one short banner at a time over the party strip, each
+	// shown once (remembered in sdmc:/3ds/exult/tips.dat). Tap to close; they
+	// also go away by themselves.
+	enum TipId { TIP_WELCOME, TIP_PORTRAIT, TIP_TALK, TIP_COMBAT, TIP_STATUS, TIP_ZOOM, TIP_MAP, TIP_3D, NUM_TIPS };
+
+	const char* const tip_text[NUM_TIPS][2] = {
+			{"Tap the picture to click there.", "Hold the stylus still to walk there."},
+			{"Tap a portrait for that inventory.", "Drag an item onto a portrait to give it."},
+			{"Tap an answer button to reply.", "Tap the picture to move the text on."},
+			{"Combat! R or the Combat button turns", "it on and off. Hold L + D-Pad down: pause."},
+			{"A portrait tag shows a problem", "(FOOD = hungry, PSN = poisoned). See ?"},
+			{"Small items? Hold L to zoom the", "picture 2x around the cursor."},
+			{"map shows a minimap - tap a spot", "on it to walk there. ? = full guide."},
+			{"Push the 3D slider up: the world", "rises out of the screen."},
+	};
+
+	unsigned  tips_seen   = 0;
+	bool      tips_loaded = false;
+	int       tip_active  = -1;
+	uint64_t  tip_since = 0, tip_last_end = 0, play_since = 0;
+
+	void tips_save() {
+		if (FILE* f = std::fopen("sdmc:/3ds/exult/tips.dat", "w")) {
+			std::fprintf(f, "%u\n", tips_seen);
+			std::fclose(f);
+		}
+	}
+
+	void tips_load() {
+		tips_loaded = true;
+		if (FILE* f = std::fopen("sdmc:/3ds/exult/tips.dat", "r")) {
+			if (std::fscanf(f, "%u", &tips_seen) != 1) {
+				tips_seen = 0;
+			}
+			std::fclose(f);
+		}
+	}
+
+	void tips_update(Game_window* gwin, Conversation* conv, uint64_t now) {
+		if (!tips_loaded) {
+			tips_load();
+		}
+		if (play_since == 0) {
+			play_since = now;
+		}
+		if (tip_active >= 0) {
+			if (now - tip_since > 15000) {
+				tip_active   = -1;
+				tip_last_end = now;
+			}
+			return;
+		}
+		if (help_page >= 0 || now - play_since < 4000 || (tip_last_end && now - tip_last_end < 8000)) {
+			return;
+		}
+		auto unseen = [&](int t) {
+			return !(tips_seen & (1u << t));
+		};
+		const bool talking = conv && conv->are_choices_active();
+		Gump_manager* gm   = gwin->get_gump_man();
+		int        pick    = -1;
+		if (unseen(TIP_TALK) && talking) {
+			pick = TIP_TALK;
+		} else if (unseen(TIP_COMBAT) && gwin->in_combat()) {
+			pick = TIP_COMBAT;
+		} else if (unseen(TIP_WELCOME)) {
+			pick = TIP_WELCOME;
+		} else if (unseen(TIP_PORTRAIT)) {
+			pick = TIP_PORTRAIT;
+		} else if (unseen(TIP_STATUS) && any_tag_now) {
+			pick = TIP_STATUS;
+		} else if (unseen(TIP_ZOOM) && gm && gm->showing_gumps()) {
+			pick = TIP_ZOOM;
+		} else if (unseen(TIP_MAP) && now - play_since > 120000) {
+			pick = TIP_MAP;
+		} else if (unseen(TIP_3D) && now - play_since > 300000) {
+			pick = TIP_3D;
+		}
+		if (pick >= 0) {
+			tip_active = pick;
+			tip_since  = now;
+			tips_seen |= 1u << pick;
+			tips_save();
+		}
+	}
+
+	void draw_tip() {
+		if (tip_active < 0) {
+			return;
+		}
+		buf->fill8(C_TEXT, W, PARTY_H, 0, PARTY_Y);
+		buf->fill8(C_PANEL_HI, W - 4, PARTY_H - 4, 2, PARTY_Y + 2);
+		text(5, "TIP", 6, PARTY_Y + 5);
+		text(5, tip_text[tip_active][0], 30, PARTY_Y + 7);
+		text(5, tip_text[tip_active][1], 30, PARTY_Y + 19);
+		text(5, "tap to close", W - 64, PARTY_Y + 33);
+		hits.insert(hits.begin(), {0, PARTY_Y, W, PARTY_H, SDLK_UNKNOWN, SDL_KMOD_NONE, 290});
+	}
+
 	void draw_pad(Game_window* gwin, Conversation* conv) {
 		view_visible = false;
 		buf->fill8(C_DIM, W, PAD_H, 0, PAD_Y);
@@ -574,26 +825,6 @@ namespace {
 			return;
 		}
 		answer_page = 0;
-
-		if (show_help) {
-			static const char* lines[] = {"Tap the picture: click there   Double-tap: use/talk",
-										  "Hold the stylus still: walk there   Drag: move items",
-										  "C-Stick cursor  Circle Pad walk  A click  X use",
-										  "B walk to cursor   Y inventory   R combat",
-										  "D-Pad: up Map, down Stats, left/right next target",
-										  "ZL keys   ZR target   START menu   SELECT save",
-										  "Hold L + D-Pad: Watch Pause Lockpick Food",
-										  "L+SELECT quick-restore   L+X next song",
-										  "Portrait: inventory. Drag an item onto it: give",
-										  "Hold L: zoom x2   map: minimap   3D slider: depth"};
-			int y = PAD_Y + 6;
-			for (const char* l : lines) {
-				text(5, l, 6, y);
-				y += 13;
-			}
-			hits.push_back({0, PAD_Y, W, PAD_H, SDLK_UNKNOWN, SDL_KMOD_NONE, 298});    // tap closes
-			return;
-		}
 
 		// Right-hand column: time, combat state, what the cursor is on, and
 		// the "?" / "map" buttons.
@@ -977,9 +1208,16 @@ void n3ds_bottom_tick() {
 	// it at our buffer while drawing and restore it afterwards.
 	Image_buffer8* prev = Shape_frame::get_render_target();
 	Shape_frame::set_to_render(buf);
-	draw_party(gwin);
-	draw_pad(gwin, conv);
-	draw_bar(gwin);
+	tips_update(gwin, conv, now);
+	if (help_page >= 0) {
+		view_visible = false;
+		draw_guide();
+	} else {
+		draw_party(gwin);
+		draw_pad(gwin, conv);
+		draw_bar(gwin);
+		draw_tip();
+	}
 	Shape_frame::set_to_render(prev);
 	blit();
 }
@@ -996,7 +1234,7 @@ extern "C" int N3DS_BottomTouch(int phase, int x, int y, float* nx, float* ny) {
 	}
 	if (phase == 0) {
 		touch_hit = hit_at(x, y);
-		touch_ui  = touch_hit >= 0 || y < PAD_Y || y >= BAR_Y || (x >= SIDE_X && !show_help && !choices_shown);
+		touch_ui  = help_page >= 0 || touch_hit >= 0 || y < PAD_Y || y >= BAR_Y || (x >= SIDE_X && !choices_shown);
 		pressed_id = touch_hit >= 0 ? hits[touch_hit].id : -1;
 		last_draw  = 0;    // redraw promptly to show the press
 	}
@@ -1006,15 +1244,28 @@ extern "C" int N3DS_BottomTouch(int phase, int x, int y, float* nx, float* ny) {
 			if (touch_hit >= 0 && now_hit == touch_hit) {
 				const Hit h = hits[touch_hit];
 				if (h.id == 297) {
-					show_help = true;
+					help_page = 0;
+				} else if (h.id == 280) {
+					help_page = std::max(0, help_page - 1);
+				} else if (h.id == 281) {
+					help_page = std::min(GUIDE_PAGES - 1, help_page + 1);
+				} else if (h.id == 282) {
+					help_page = -1;
+				} else if (h.id == 283) {
+					tips_seen    = 0;    // replay the first-time tips
+					tips_save();
+					play_since   = SDL_GetTicks();
+					tip_last_end = 0;
+					help_page    = -1;
+				} else if (h.id == 290) {
+					tip_active   = -1;
+					tip_last_end = SDL_GetTicks();
 				} else if (h.id == 296) {
 					minimap_on = !minimap_on;
 					mm_built   = 0;
 				} else if (h.id == 295) {
 					pending_tx = (mm_ox + (x - 1) / MM_SCALE + c_num_tiles) % c_num_tiles;
 					pending_ty = (mm_oy + (y - PAD_Y - 1) / MM_SCALE + c_num_tiles) % c_num_tiles;
-				} else if (h.id == 298) {
-					show_help = false;
 				} else if (h.id == 299) {
 					answer_page++;
 				} else if (h.key != SDLK_UNKNOWN) {

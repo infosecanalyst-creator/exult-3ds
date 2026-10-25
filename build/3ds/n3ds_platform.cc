@@ -342,7 +342,9 @@ extern "C" void n3ds_after_sdl_init() {
 	if (linked_to_pc) {
 		// The bottom-screen console would take stdout back from the network
 		// link, so print the legend to the PC terminal instead.
-		puts("[exult-3ds] controls: touch=point+click, C-stick=cursor, CirclePad=walk,\n"
+		puts("[exult-3ds] in game the bottom screen is a live picture: tap=click, hold=walk, drag=move,\n"
+		     "  drag onto a portrait=give, hold L=zoom; ? opens the guide.\n"
+		     "  controls: C-stick=cursor, CirclePad=walk,\n"
 		     "  A=click/drag B=walk-to-cursor X=use Y=inventory, D-pad ^Map vStats <>targets,\n"
 		     "  R=combat ZL=keys ZR=target START=menu SELECT=quicksave; hold L: ^Watch vPause <Lockpick >Food,\n"
 		     "  L+SELECT=quick-restore L+Y=help L+X=next track");
@@ -354,19 +356,18 @@ extern "C" void n3ds_after_sdl_init() {
 	printf("%s", "\x1b[2J\x1b[1;1H");
 	printf("%s", "\x1b[33m  EXULT - Ultima VII for New 3DS\x1b[0m\n");
 	printf("%s", "  ------------------------------------\n");
-	printf("%s", "  Touch here   point + click (top scr)\n");
-	printf("%s", "  C-Stick      move cursor\n");
-	printf("%s", "  Circle Pad   walk\n");
-	printf("%s", "  A  click/drag    B  walk to cursor\n");
-	printf("%s", "  X  use/talk      Y  inventory\n");
-	printf("%s", "  D-Pad  ^Map vStats  <> nearby targets\n");
-	printf("%s", "  R  combat   ZL keys   ZR target\n");
-	printf("%s", "  START menu  SELECT quicksave\n");
+	printf("%s", "  Pick a game on the top screen:\n");
+	printf("%s", "  touch here to point and click there.\n");
 	printf("%s", "  ------------------------------------\n");
-	printf("%s", "  Hold L for:\n");
-	printf("%s", "  D-Pad  ^Watch vPause <Lockpick >Food\n");
-	printf("%s", "  SELECT quick-restore   Y help\n");
-	printf("%s", "  X next music track\n");
+	printf("%s", "  In the game, this screen becomes your\n");
+	printf("%s", "  control panel: a live picture of the\n");
+	printf("%s", "  game you tap, hold to walk, drag to\n");
+	printf("%s", "  move items. Tap ? there for a guide.\n");
+	printf("%s", "  ------------------------------------\n");
+	printf("%s", "  C-Stick cursor     Circle Pad walk\n");
+	printf("%s", "  A click  B walk-to  X use  Y items\n");
+	printf("%s", "  START menu         SELECT quicksave\n");
+	printf("%s", "  3D slider: depth (in game)\n");
 	printf("%s", "  ------------------------------------\n");
 	if (!file_exists("sdmc:/3ds/dspfirm.cdc")) {
 		printf("%s", "\x1b[31m  NO SOUND: /3ds/dspfirm.cdc missing\n  (run DSP1 once to create it)\x1b[0m\n");

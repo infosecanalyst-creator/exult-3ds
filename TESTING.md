@@ -2,6 +2,11 @@
 
 Notes from development and testing. The build is tested in the Azahar emulator (New 3DS mode), with real-hardware results added as they come in.
 
+## In-game guide and tips (Oct 25)
+- The **?** guide has 8 pages: Welcome, The live picture, The party strip, The info column, Talking to people, The action bar, Buttons, and 3D/saving/tips. All 8 checked in the emulator, with Back, Next, Close and Show tips again working.
+- **First-time tips:** the welcome tip appeared about 4 s into the game; after it was closed, the portrait tip followed about 8 s later. Seen tips are stored in `sdmc:/3ds/exult/tips.dat`.
+- The pre-game screen is updated for the touch panel.
+
 ## Startup speed (Oct 25)
 - Exult re-opens its data files many times: `exult.flx` about 20 times during startup, and the multi-MB shape files several times. The earlier loader read the whole file on every open, which came to more than 100 MB of SD reads before the game started.
 - Files up to 9 MB are now read once and shared from a 24 MB RAM cache. Larger files are read in 32 KB pieces, so only the parts Exult asks for are read.

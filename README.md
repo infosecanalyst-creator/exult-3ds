@@ -63,6 +63,11 @@ sdmc:/3ds/exult/serpentisle/static/    your Serpent Isle STATIC folder (+ mods/)
 
 ## Playing
 
+### Learning the controls in the game
+- **Tips:** the first time you need something, a short tip appears over the party strip. There are tips for touching the picture, portraits, conversations, combat, status tags, zoom, the minimap and 3D. Each one shows once. Tap a tip to close it.
+- **The ? button** opens an 8-page illustrated guide. Each page shows a miniature of the bottom screen with the part it explains highlighted. The last page can replay all the tips.
+- **Before a game is loaded,** the bottom screen explains how the touch panel works once you're in.
+
 ### Bottom screen
 
 - **Party strip (top):**
@@ -80,7 +85,7 @@ sdmc:/3ds/exult/serpentisle/static/    your Serpent Isle STATIC folder (+ mods/)
 - **Info column (right):**
   - The day and time, and COMBAT while you're fighting.
   - What the cursor is on: a person's name with their health, or an item's name and how many there are.
-  - The **?** (help) and **map** buttons.
+  - The **?** (guide) and **map** buttons.
 - **Dialogue:** the middle area turns into large answer buttons.
 - **Minimap (map):** terrain around the party, with people marked and the visible area outlined. Tap a spot to walk there.
 - **Action bar (bottom):** Map, Spells, Notes, Keys, Pack / Combat, Target, Food, Save, Menu.
