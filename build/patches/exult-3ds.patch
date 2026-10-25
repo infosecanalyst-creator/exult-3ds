@@ -83,10 +83,18 @@ index 4ba1584..a51b1a9 100644
  	// KBD repeat should be nice.
  	SDL_HideCursor();
 diff --git a/files/utils.cc b/files/utils.cc
-index 6f68316..59c3df6 100644
+index 6f68316..f241bff 100644
 --- a/files/utils.cc
 +++ b/files/utils.cc
-@@ -76,6 +76,15 @@
+@@ -38,6 +38,7 @@
+ #include <cstdio>
+ #include <cstdlib>
+ #include <cstring>
++#include <memory>
+ #include <exception>
+ #include <fstream>
+ #include <list>
+@@ -76,6 +77,15 @@
  #	endif    // __GNUC__
  #endif
  
@@ -102,28 +110,35 @@ index 6f68316..59c3df6 100644
  using std::ios;
  using std::string;
  
-@@ -85,6 +94,129 @@ static void switch_slashes(string& name);
+@@ -85,6 +95,192 @@ static void switch_slashes(string& name);
  static bool base_to_uppercase(string& str, int count);
  
  // Global factories for instantiating file streams
 +#ifdef N3DS_PORT
-+// 3DS: every request that reaches the SD card is a slow IPC round trip, and
-+// stream reads were reaching it 1 KB at a time. Read-only opens instead pull
-+// the whole file into memory with a few large read() calls and serve it from
-+// RAM (Exult's data files total well under the 96 MB heap). Writes get a
-+// 32 KB buffer.
++// 3DS: every request that reaches the SD card is a slow IPC round trip.
++//  - Files up to 9 MB are read whole with a few large read() calls and kept
++//    in a RAM cache (24 MB, least-recently-used out; streams share the
++//    cached copy), so each is read from the card once. Exult re-opens its data
++//    files many times (exult.flx ~20x during startup); reading them whole on
++//    every open cost 100+ MB of SD reads before the game started.
++//  - Bigger files (exult_si.flx, 10.7 MB) are read through a 32 KB buffer, so
++//    only the parts Exult asks for are read.
++//  - Writes get a 32 KB buffer and drop the written file from the cache.
 +namespace {
-+	constexpr std::size_t N3DS_STREAM_BUF = 32 * 1024;
-+	constexpr std::size_t N3DS_READ_CHUNK = 256 * 1024;
-+	constexpr off_t       N3DS_MEM_MAX    = 24 * 1024 * 1024;
++	constexpr std::size_t N3DS_STREAM_BUF  = 32 * 1024;
++	constexpr std::size_t N3DS_READ_CHUNK  = 256 * 1024;
++	constexpr off_t       N3DS_CACHE_FILE  = 9 * 1024 * 1024;     // largest file kept in RAM
++	constexpr std::size_t N3DS_CACHE_TOTAL = 24 * 1024 * 1024;    // RAM cache budget
++
++	using FileData = std::shared_ptr<const std::vector<char>>;
 +
 +	class MemBuf : public std::streambuf {
-+		std::vector<char> data;
++		FileData data;
 +
 +	public:
-+		explicit MemBuf(std::vector<char>&& d) : data(std::move(d)) {
-+			char* b = data.data();
-+			setg(b, b, b + data.size());
++		explicit MemBuf(FileData d) : data(std::move(d)) {
++			char* b = const_cast<char*>(data->data());    // read-only use
++			setg(b, b, b + data->size());
 +		}
 +
 +	protected:
@@ -157,7 +172,7 @@ index 6f68316..59c3df6 100644
 +	struct MemIstream : std::istream {
 +		MemBuf buf;
 +
-+		explicit MemIstream(std::vector<char>&& d) : std::istream(nullptr), buf(std::move(d)) {
++		explicit MemIstream(FileData d) : std::istream(nullptr), buf(std::move(d)) {
 +			rdbuf(&buf);
 +		}
 +	};
@@ -193,46 +208,102 @@ index 6f68316..59c3df6 100644
 +		}
 +	};
 +
++	struct CacheEntry {
++		FileData      data;
++		off_t         size;
++		time_t        mtime;
++		unsigned long last_use;
++	};
++
++	std::map<std::string, CacheEntry> file_cache;
++	unsigned long long                bytes_read_whole = 0;    // for the startup report
++	std::size_t                       cache_bytes = 0;
++	unsigned long                     cache_clock = 0;
++
++	void cache_drop(const std::string& path) {
++		auto it = file_cache.find(path);
++		if (it != file_cache.end()) {
++			cache_bytes -= it->second.data->size();
++			file_cache.erase(it);
++		}
++	}
++
++	void cache_make_room(std::size_t need) {
++		while (!file_cache.empty() && cache_bytes + need > N3DS_CACHE_TOTAL) {
++			auto oldest = file_cache.begin();
++			for (auto it = file_cache.begin(); it != file_cache.end(); ++it) {
++				if (it->second.last_use < oldest->second.last_use) {
++					oldest = it;
++				}
++			}
++			cache_bytes -= oldest->second.data->size();
++			file_cache.erase(oldest);
++		}
++	}
++
 +	std::unique_ptr<std::istream> n3ds_open_in(const char* s, std::ios_base::openmode mode) {
++		struct stat st {};
++		if (::stat(s, &st) != 0 || !S_ISREG(st.st_mode)) {
++			auto fail = std::make_unique<std::ifstream>();
++			fail->setstate(std::ios::failbit);
++			return fail;
++		}
++		if (st.st_size > N3DS_CACHE_FILE) {
++			return std::make_unique<N3dsIfstream>(s, mode);    // big file: read only what's needed
++		}
++		const std::string key(s);
++		auto              it = file_cache.find(key);
++		if (it != file_cache.end() && it->second.size == st.st_size && it->second.mtime == st.st_mtime) {
++			it->second.last_use = ++cache_clock;
++			return std::make_unique<MemIstream>(it->second.data);
++		}
++		cache_drop(key);
 +		const int fd = ::open(s, O_RDONLY);
 +		if (fd < 0) {
 +			auto fail = std::make_unique<std::ifstream>();
 +			fail->setstate(std::ios::failbit);
 +			return fail;
 +		}
-+		struct stat st {};
-+		if (::fstat(fd, &st) != 0 || st.st_size > N3DS_MEM_MAX) {
-+			::close(fd);
-+			return std::make_unique<N3dsIfstream>(s, mode);    // huge file: buffered stream
-+		}
-+		std::vector<char> data(static_cast<std::size_t>(st.st_size));
-+		std::size_t       got = 0;
-+		while (got < data.size()) {
-+			const std::size_t want = std::min(N3DS_READ_CHUNK, data.size() - got);
-+			const ssize_t     r    = ::read(fd, data.data() + got, want);
++		auto        data = std::make_shared<std::vector<char>>(static_cast<std::size_t>(st.st_size));
++		std::size_t got  = 0;
++		while (got < data->size()) {
++			const std::size_t want = std::min(N3DS_READ_CHUNK, data->size() - got);
++			const ssize_t     r    = ::read(fd, data->data() + got, want);
 +			if (r <= 0) {
 +				break;
 +			}
 +			got += static_cast<std::size_t>(r);
 +		}
 +		::close(fd);
-+		data.resize(got);
++		data->resize(got);
++		bytes_read_whole += got;
++		if (got == static_cast<std::size_t>(st.st_size)) {
++			cache_make_room(got);
++			file_cache[key] = CacheEntry{data, st.st_size, st.st_mtime, ++cache_clock};
++			cache_bytes += got;
++		}
 +		return std::make_unique<MemIstream>(std::move(data));
 +	}
 +}    // namespace
++
++extern "C" unsigned long n3ds_cache_report(unsigned long* cached_kb) {
++	*cached_kb = static_cast<unsigned long>(cache_bytes / 1024);
++	return static_cast<unsigned long>(bytes_read_whole / 1024);
++}
 +
 +static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openmode mode) {
 +	return n3ds_open_in(s, mode);
 +};
 +
 +static U7OstreamFactory ostream_factory = [](const char* s, std::ios_base::openmode mode) {
++	cache_drop(s);    // the cached copy is about to be stale
 +	return std::unique_ptr<std::ostream>(std::make_unique<N3dsOfstream>(s, mode));
 +};
 +#else
  static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openmode mode) {
  	return std::make_unique<std::ifstream>(s, mode);
  };
-@@ -92,6 +224,7 @@ static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openm
+@@ -92,6 +288,7 @@ static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openm
  static U7OstreamFactory ostream_factory = [](const char* s, std::ios_base::openmode mode) {
  	return std::make_unique<std::ofstream>(s, mode);
  };
@@ -240,7 +311,7 @@ index 6f68316..59c3df6 100644
  
  // Ugly hack for supporting different paths
  
-@@ -257,6 +390,12 @@ static bool base_to_uppercase(string& str, int count) {
+@@ -257,6 +454,12 @@ static bool base_to_uppercase(string& str, int count) {
  	if (count <= 0) {
  		return true;
  	}

@@ -1,0 +1,71 @@
+# Testing and change history
+
+Notes from development and testing. The build is tested in the Azahar emulator (New 3DS mode), with real-hardware results added as they come in.
+
+## Startup speed (Oct 25)
+- Exult re-opens its data files many times: `exult.flx` about 20 times during startup, and the multi-MB shape files several times. The earlier loader read the whole file on every open, which came to more than 100 MB of SD reads before the game started.
+- Files up to 9 MB are now read once and shared from a 24 MB RAM cache. Larger files are read in 32 KB pieces, so only the parts Exult asks for are read.
+- Emulator, Black Gate:
+
+  | | Before | After |
+  |---|---|---|
+  | Startup to the menu | 4.6 s | 2.8 s |
+  | Journey Onward load | about 38 s | about 29 s |
+  | Data read whole | more than 100 MB | 25.8 MB |
+  | Heap in use (of 96 MB) | | 32 MB |
+- `exult.log` now records, once per session, how much was read and cached when the game first appears.
+
+## Tested in the Azahar emulator (New 3DS mode) with Black Gate and Serpent Isle (GOG data)
+- **Serpent Isle:**
+  - The menu, character creation and the opening scene on the ship work.
+  - The party strip shows the SI portraits (Iolo, Shamino, Dupre).
+  - Saving and Journey Onward work.
+- **3D:** checked in the emulator's side-by-side mode in Trinsic and on SI's ship.
+  - Roofs, tree tops and walls come forward, and the ground sits behind.
+  - Windows and text stay flat.
+- **Minimap:** tapping across Trinsic walked the Avatar there, and the party followed.
+- **Fixed a file-writing bug that could corrupt data.** Files that weren't closed explicitly lost their first 8 bytes. This broke the start of every new Serpent Isle game, and could affect other files.
+  - If Serpent Isle closed itself when you started a new game with the earlier build, just start a new game again.
+  - Black Gate saves were checked and are fine.
+- **Startup and loading:**
+  - Startup to the menu takes about 5 seconds.
+  - A new game takes about 30 seconds, and Journey Onward about 25.
+  - Memory: 96 MB for the game and 22 MB for graphics and sound.
+- **Bottom screen:**
+  - Portraits update live, and tapping one opens that member's inventory.
+  - Dialogue answer buttons work: job and bye with Iolo.
+  - The action bar's Map and Save buttons work.
+  - The under-cursor name shows ("Iolo", "slate roof"), and the help overlay opens.
+- **Controls:** D-pad target cycling goes Iolo first, then signs, then the lamp post.
+- **Your PC save works on the 3DS:**
+  - With the Keyring mod chosen from Show Mods, your PC save `exult00bg.sav` appeared in Load/Save and loaded correctly.
+  - The 3DS keeps mod saves in `saves/bg/mods/Keyring/saves`, the same as the PC.
+- **Save sync:**
+  - Tested against a stand-in for the 3DS's FTP server: first sync with a clash, nothing changed, played on the 3DS, played on the PC, and the copy of the game in progress.
+  - No save was lost or overwritten in any case.
+- **Autosave:** it fires only when you're idle and writes the game in progress.
+
+Not yet tested:
+- Running on a real 3DS, including speed and the real cost of 3D.
+- Sound on hardware.
+
+## Interface review (Oct 25)
+I compared the interface with stylus-driven DS/3DS games, mouse-driven CRPGs, and touch versions of PC RPGs (including Exult's own iOS/Android settings). Two things changed:
+- **What you see is what you tap.** The middle of the bottom screen used to be a blank touchpad, so you had to guess where on the top screen a touch would land. It now shows a live copy of the top screen at the correct proportions. A tap lands exactly where you see it.
+- **Fewer steps:**
+  - Walking anywhere is now one gesture: hold the stylus still. It uses Exult's touch path-finding, the same as the phone versions.
+  - Identifying something no longer needs a separate window: the info column shows names, health and item counts as soon as the cursor touches them.
+- Older configs are updated once, at the first launch of this build, to turn hold-to-walk on.
+- **Round two:**
+  - Drag items onto party portraits.
+  - Hold L to zoom.
+  - Status tags and plain-English alerts in the party strip.
+  - The bottom screen now also updates while the game is paused, for example with an inventory open. Before this, it froze until something moved on the top screen.
+
+## Fixes from the first hardware run (Oct 25)
+- **The Avatar couldn't move.** My default config set Exult's `fps` to 30. In Exult that setting is the game speed, not the display frame rate: 5 is normal, so 30 ran the game six times too fast. Opening Exult's Game Engine options then saved a garbage value, which froze the game timer.
+  - The default is now 5.
+  - Exult now ignores out-of-range values, and the options screen no longer writes garbage.
+  - Your 3DS's `exult.cfg` was corrected over FTP.
+- **The log is lighter and timestamped.** Each line of `exult.log` starts with seconds since launch, so slow startup steps show up. The log is now written to the SD card once a second instead of on every line.
+
