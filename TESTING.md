@@ -2,6 +2,11 @@
 
 Notes from development and testing. The build is tested in the Azahar emulator (New 3DS mode), with real-hardware results added as they come in.
 
+## Modern fonts (Oct 25)
+- The yellow blackletter text fonts (Exult fonts 0 and 7) are replaced by DejaVu Sans Bold 10 px, in palette colour 118 (236,236,236) with a black outline. The 14 px line height and the baseline are unchanged, so Exult's text layouts still fit. Bullets and other special characters were recoloured as well.
+- Checked in the emulator: Iolo's conversation, the topic keywords, the answer buttons on the bottom screen, and item names.
+- Existing configs switch to `fonts=modern` once (marker file `.cfg-v3`). "Modern" was added to Exult's Display options, so pressing OK there doesn't silently switch back.
+
 ## In-game guide and tips (Oct 25)
 - The **?** guide has 8 pages: Welcome, The live picture, The party strip, The info column, Talking to people, The action bar, Buttons, and 3D/saving/tips. All 8 checked in the emulator, with Back, Next, Close and Show tips again working.
 - **First-time tips:** the welcome tip appeared about 4 s into the game; after it was closed, the portrait tip followed about 8 s later. Seen tips are stored in `sdmc:/3ds/exult/tips.dat`.

@@ -134,7 +134,7 @@ static const char* default_cfg =
 		"\t\t</midi>\n"
 		"\t\t<speech>\n\t\t\t<enabled>\n\t\t\tyes\n\t\t\t</enabled>\n\t\t</speech>\n"
 		"\t</audio>\n"
-		"\t<gameplay>\n\t\t<skip_splash>\n\t\tyes\n\t\t</skip_splash>\n\t</gameplay>\n"
+		"\t<gameplay>\n\t\t<skip_splash>\n\t\tyes\n\t\t</skip_splash>\n\t\t<fonts>\n\t\tmodern\n\t\t</fonts>\n\t</gameplay>\n"
 		"</config>\n";
 
 static FILE*      log_file = nullptr;
@@ -240,6 +240,11 @@ static bool file_exists(const char* p) {
 // animation speed; the first build wrote 30, the options screen could then
 // save garbage).
 static void migrate_cfg() {
+	const bool v2 = !file_exists(N3DS_HOME "/.cfg-v2");    // hold-to-walk, game speed
+	const bool v3 = !file_exists(N3DS_HOME "/.cfg-v3");    // modern fonts
+	if (!v2 && !v3) {
+		return;
+	}
 	FILE* f = fopen(N3DS_HOME "/exult.cfg", "rb");
 	if (!f) {
 		return;
@@ -259,19 +264,39 @@ static void migrate_cfg() {
 			changed = true;
 		}
 	};
-	replace("<touch_pathfind>no</touch_pathfind>", "<touch_pathfind>yes</touch_pathfind>");
-	const size_t a = cfg.find("<fps>"), b = cfg.find("</fps>");
-	if (a != std::string::npos && b != std::string::npos && b > a) {
-		const int fps = atoi(cfg.c_str() + a + 5);
-		if (fps <= 0 || fps > 20) {
-			cfg.replace(a + 5, b - a - 5, "5");
+	if (v2) {
+		replace("<touch_pathfind>no</touch_pathfind>", "<touch_pathfind>yes</touch_pathfind>");
+		const size_t a = cfg.find("<fps>"), b = cfg.find("</fps>");
+		if (a != std::string::npos && b != std::string::npos && b > a) {
+			const int fps = atoi(cfg.c_str() + a + 5);
+			if (fps <= 0 || fps > 20) {
+				cfg.replace(a + 5, b - a - 5, "5");
+				changed = true;
+			}
+		}
+	}
+	if (v3) {    // switch to the readable fonts once (the options screen can switch back)
+		const size_t a = cfg.find("<fonts>"), b = cfg.find("</fonts>");
+		if (a != std::string::npos && b != std::string::npos && b > a) {
+			cfg.replace(a + 7, b - a - 7, "modern");
 			changed = true;
+		} else {
+			const size_t g = cfg.find("</gameplay>");
+			if (g != std::string::npos) {
+				cfg.insert(g, "<fonts>modern</fonts>\n  ");
+				changed = true;
+			}
 		}
 	}
 	if (changed) {
 		if (FILE* o = fopen(N3DS_HOME "/exult.cfg", "wb")) {
 			fwrite(cfg.data(), 1, cfg.size(), o);
 			fclose(o);
+		}
+	}
+	for (const char* marker : {N3DS_HOME "/.cfg-v2", N3DS_HOME "/.cfg-v3"}) {
+		if (FILE* m = fopen(marker, "w")) {
+			fclose(m);
 		}
 	}
 }
@@ -295,11 +320,8 @@ __attribute__((constructor(101))) static void n3ds_early_init() {
 			fputs(default_cfg, f);
 			fclose(f);
 		}
-	} else if (!file_exists(N3DS_HOME "/.cfg-v2")) {
-		migrate_cfg();
-	}
-	if (FILE* f = fopen(N3DS_HOME "/.cfg-v2", "w")) {    // one-time settings update done
-		fclose(f);
+	} else {
+		migrate_cfg();    // one-time updates, each guarded by its own marker file
 	}
 
 	if (__3dslink_host.s_addr != 0) {
