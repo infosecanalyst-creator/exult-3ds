@@ -226,6 +226,48 @@ static bool file_exists(const char* p) {
 	return stat(p, &st) == 0;
 }
 
+// One-time update of a config written by an earlier build: turn on
+// hold-to-walk (touch_pathfind) and fix the game speed (fps is Exult's
+// animation speed; the first build wrote 30, the options screen could then
+// save garbage).
+static void migrate_cfg() {
+	FILE* f = fopen(N3DS_HOME "/exult.cfg", "rb");
+	if (!f) {
+		return;
+	}
+	std::string cfg;
+	char        chunk[4096];
+	size_t      n;
+	while ((n = fread(chunk, 1, sizeof chunk, f)) > 0) {
+		cfg.append(chunk, n);
+	}
+	fclose(f);
+	bool changed = false;
+	auto replace = [&](const std::string& from, const std::string& to) {
+		const size_t p = cfg.find(from);
+		if (p != std::string::npos) {
+			cfg.replace(p, from.size(), to);
+			changed = true;
+		}
+	};
+	replace("<touch_pathfind>no</touch_pathfind>", "<touch_pathfind>yes</touch_pathfind>");
+	const size_t a = cfg.find("<fps>"), b = cfg.find("</fps>");
+	if (a != std::string::npos && b != std::string::npos && b > a) {
+		const int fps = atoi(cfg.c_str() + a + 5);
+		if (fps <= 0 || fps > 20) {
+			cfg.replace(a + 5, b - a - 5, "5");
+			changed = true;
+		}
+	}
+	if (changed) {
+		if (FILE* o = fopen(N3DS_HOME "/exult.cfg", "wb")) {
+			fwrite(cfg.data(), 1, cfg.size(), o);
+			fclose(o);
+		}
+	}
+}
+
+
 __attribute__((constructor(101))) static void n3ds_early_init() {
 	osSetSpeedupEnable(true);    // New 3DS: 804 MHz + L2 cache
 	std::set_terminate(n3ds_terminate);
@@ -244,6 +286,11 @@ __attribute__((constructor(101))) static void n3ds_early_init() {
 			fputs(default_cfg, f);
 			fclose(f);
 		}
+	} else if (!file_exists(N3DS_HOME "/.cfg-v2")) {
+		migrate_cfg();
+	}
+	if (FILE* f = fopen(N3DS_HOME "/.cfg-v2", "w")) {    // one-time settings update done
+		fclose(f);
 	}
 
 	if (__3dslink_host.s_addr != 0) {

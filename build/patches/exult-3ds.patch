@@ -302,10 +302,23 @@ index 342436d..c918192 100644
  	if (bbox_palindex != -1) {
  		obj->get_info().paint_bbox(
 diff --git a/gamewin.cc b/gamewin.cc
-index e40fbdd..f4a9882 100644
+index e40fbdd..90c7ad3 100644
 --- a/gamewin.cc
 +++ b/gamewin.cc
-@@ -618,7 +618,7 @@ void Game_window::init_files(bool cycle) {
+@@ -407,7 +407,11 @@ Game_window::Game_window(
+ 	const string default_scroll_with_mouse = "yes";
+ 	const string default_item_menu         = "no";
+ 	const string default_dpad_location     = "no";
+-	const string default_touch_pathfind    = "no";
++#	ifdef N3DS_PORT
++	const string default_touch_pathfind = "yes";    // 3DS: hold the stylus still to walk there
++#	else
++	const string default_touch_pathfind = "no";
++#	endif
+ 	const string default_shortcutbar       = "no";
+ 	const string default_outline           = "no";
+ #endif
+@@ -618,7 +622,7 @@ void Game_window::init_files(bool cycle) {
  
  	int fps;    // Init. animation speed.
  	config->value("config/video/fps", fps, 5);

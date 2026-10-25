@@ -41,9 +41,14 @@ When you're playing, the bottom screen becomes part of the game:
   - Shows a portrait of each party member with health (red) and mana (blue) bars.
   - A portrait flashes red when that member is hit and green when poisoned.
   - **Tap a portrait** to open that member's inventory.
-- **Middle area:**
-  - Works as a **touchpad** for the top-screen cursor. Touching is a click, and you can drag items.
-  - Shows the time of day, **the name of whatever the cursor is over**, and COMBAT when you're fighting.
+- **Middle area: a live picture of the top screen.** Tap what you see:
+  - **Tap** clicks that spot, the same as clicking with a mouse.
+  - **Double-tap** uses or talks to something.
+  - **Drag** moves items.
+  - **Hold the stylus still** for half a second and the Avatar walks there.
+- **Info column** (right of the picture):
+  - Shows the day and time, and COMBAT in red while you're fighting.
+  - Shows **what the cursor is on**: a person's name with their health bar, or an item's name and how many there are. This works inside open backpacks too.
 - **map** (right-hand column) turns the middle area into a **live minimap** of the area around the party:
   - It shows terrain and roads, the party (green), other people (yellow, or red if hostile), and a box for what the top screen shows.
   - **Tap a spot on the minimap and the Avatar walks there**, finding the way around buildings and water. The party follows.
@@ -69,7 +74,10 @@ With the slider all the way down, it's switched off and costs nothing. When it's
 
 | Input | Action |
 |---|---|
-| Touch, middle area | Point and click on the top screen (drag to move items) |
+| Tap the picture (middle area) | Click there |
+| Double-tap the picture | Use / talk |
+| Hold the stylus still | Walk there |
+| Drag on the picture | Move items |
 | **map** button, then tap | Minimap: walk to the tapped spot |
 | 3D slider | Stereoscopic 3D depth (off at the bottom) |
 | C-Stick | Move the cursor |
@@ -147,6 +155,14 @@ How the sync behaves:
 Not yet tested:
 - Running on a real 3DS, including speed and the real cost of 3D.
 - Sound on hardware.
+
+## Interface review (Oct 25)
+I compared the interface with stylus-driven DS/3DS games, mouse-driven CRPGs, and touch versions of PC RPGs (including Exult's own iOS/Android settings). Two things changed:
+- **What you see is what you tap.** The middle of the bottom screen used to be a blank touchpad, so you had to guess where on the top screen a touch would land. It now shows a live copy of the top screen at the correct proportions. A tap lands exactly where you see it.
+- **Fewer steps:**
+  - Walking anywhere is now one gesture: hold the stylus still. It uses Exult's touch path-finding, the same as the phone versions.
+  - Identifying something no longer needs a separate window: the info column shows names, health and item counts as soon as the cursor touches them.
+- Older configs are updated once, at the first launch of this build, to turn hold-to-walk on.
 
 ## Fixes from the first hardware run (Oct 25)
 - **The Avatar couldn't move.** My default config set Exult's `fps` to 30. In Exult that setting is the game speed, not the display frame rate: 5 is normal, so 30 ran the game six times too fast. Opening Exult's Game Engine options then saved a garbage value, which froze the game timer.
