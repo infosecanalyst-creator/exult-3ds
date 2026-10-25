@@ -68,6 +68,8 @@
 
 extern "C" void N3DS_SetCursor(float x, float y);
 extern "C" void n3ds_log_flush();
+extern "C" unsigned long n3ds_cache_report(unsigned long* cached_kb);
+extern "C" int n3ds_heap_used_mb();
 
 namespace {
 	constexpr int W = 320;
@@ -857,6 +859,16 @@ void n3ds_bottom_tick() {
 		return;    // still in Exult's menus: the console legend stays up
 	}
 	const uint64_t now = SDL_GetTicks();
+	{
+		static bool reported = false;    // once, when the game first appears
+		if (!reported) {
+			reported = true;
+			unsigned long cached_kb = 0;
+			const unsigned long read_kb = n3ds_cache_report(&cached_kb);
+			std::printf("[exult-3ds] in game: %.1f MB read whole from SD, %.1f MB cached, heap used %d MB\n",
+						read_kb / 1024.0, cached_kb / 1024.0, n3ds_heap_used_mb());
+		}
+	}
 	{
 		static uint64_t last_flush = 0;
 		if (now - last_flush > 2000) {

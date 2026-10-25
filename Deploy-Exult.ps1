@@ -18,7 +18,7 @@ param(
   [int]$FtpPort = 5000,
   [string]$App,
   [string]$PcExultCfg = "C:\Ultima\Config\exult.cfg",
-  [string[]]$SearchRoots = @("C:\Ultima", "$env:USERPROFILE\OneDrive\Desktop\Ultima Sources", "$env:USERPROFILE\Desktop\Ultima Sources")
+  [string[]]$SearchRoots = @("$PSScriptRoot\games", "C:\Ultima", "C:\GOG Games", "${env:ProgramFiles(x86)}\GOG Galaxy\Games", "$env:USERPROFILE\OneDrive\Desktop\Ultima Sources", "$env:USERPROFILE\Desktop\Ultima Sources")
 )
 $ErrorActionPreference = "Stop"
 $kit      = Split-Path -Parent $MyInvocation.MyCommand.Path
