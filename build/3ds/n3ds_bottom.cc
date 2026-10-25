@@ -21,6 +21,7 @@
  */
 #include <3ds.h>
 
+#include "Gump.h"
 #include "Gump_manager.h"
 #include "actors.h"
 #include "combat_opts.h"
@@ -74,8 +75,12 @@ namespace {
 	constexpr int PARTY_Y = 0, PARTY_H = 46;
 	constexpr int PAD_Y = PARTY_H, PAD_H = 136;
 	constexpr int BAR_Y = PAD_Y + PAD_H, BAR_H = H - BAR_Y;    // 58
-	constexpr int SIDE_X = W - 32;    // right-hand column of the middle area: "?" and "map" buttons;
-									  // the touchpad is everything left of it
+	// Middle area: a live picture of the top screen at the left (tap where you
+	// see), aspect-correct (400x240 scaled to 227x136), and an info/button
+	// column at the right.
+	constexpr int VIEW_W = (400 * PAD_H + 120) / 240;    // 227
+	constexpr int SIDE_X = VIEW_W + 1;
+	constexpr int SIDE_W = W - SIDE_X;
 
 	constexpr int SB_COMBAT = 0, SB_DISK = 1, SB_KEYRING = 3, SB_SPELLBOOK = 4, SB_TARGET = 5, SB_FOOD = 6, SB_MAPS = 8,
 				  SB_NOTEBOOK = 9, SB_BACKPACK = 10;
@@ -102,6 +107,10 @@ namespace {
 	int                 touch_hit     = -1;    // index into hits for the current UI touch
 	bool                touch_ui      = false;
 	bool                minimap_on    = false;
+	bool                view_visible  = false;    // live top-screen picture is showing
+	uint16_t            view_px[PAD_H * VIEW_W];    // RGB565, filled from the top screen
+	bool                view_new      = false;
+	uint64_t            view_last     = 0;
 	unsigned char       C_BG, C_PANEL, C_PANEL_HI, C_EDGE, C_RED, C_BLUE, C_GREEN, C_DIM, C_TEXT;
 
 	unsigned char nearest(int r, int g, int b) {
@@ -135,6 +144,17 @@ namespace {
 		C_TEXT     = nearest(230, 220, 190);
 	}
 
+	void blit_view(uint16_t* fb) {
+		for (int y = 0; y < PAD_H; y++) {
+			const uint16_t* row = view_px + y * VIEW_W;
+			uint16_t*       col = fb + (239 - (PAD_Y + y));
+			for (int x = 0; x < VIEW_W; x++) {
+				col[x * 240] = row[x];
+			}
+		}
+		view_new = false;
+	}
+
 	void blit() {
 		auto*                fb  = reinterpret_cast<uint16_t*>(gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, nullptr, nullptr));
 		const unsigned char* src = buf->get_bits();
@@ -144,6 +164,9 @@ namespace {
 			for (int x = 0; x < W; x++) {
 				fb[x * 240 + (239 - y)] = rgb[row[x]];
 			}
+		}
+		if (view_visible) {
+			blit_view(fb);
 		}
 		GSPGPU_FlushDataCache(fb, W * H * 2);
 	}
@@ -179,6 +202,47 @@ namespace {
 			str.pop_back();
 		}
 		f->paint_text(buf, str.c_str(), cx - f->get_text_width(str.c_str()) / 2, y);
+	}
+
+	// Word-wrapped text, at most max_lines lines; returns the y after it.
+	int text_wrapped(int fontnum, const std::string& s, int x, int y, int maxw, int max_lines, int line_h) {
+		auto f = font(fontnum);
+		if (!f) {
+			return y;
+		}
+		std::string line, word;
+		int         lines = 0;
+		auto        flush = [&]() {
+            if (!line.empty() && lines < max_lines) {
+                f->paint_text(buf, line.c_str(), x, y);
+                y += line_h;
+                lines++;
+            }
+            line.clear();
+		};
+		for (size_t i = 0; i <= s.size(); i++) {
+			const char c = i < s.size() ? s[i] : ' ';
+			if (c != ' ') {
+				word += c;
+				continue;
+			}
+			if (word.empty()) {
+				continue;
+			}
+			const std::string cand = line.empty() ? word : line + " " + word;
+			if (f->get_text_width(cand.c_str()) <= maxw) {
+				line = cand;
+			} else {
+				flush();
+				line = word;
+				while (line.size() > 1 && f->get_text_width(line.c_str()) > maxw) {
+					line.pop_back();
+				}
+			}
+			word.clear();
+		}
+		flush();
+		return y;
 	}
 
 	void panel(int x, int y, int w, int h, bool hi) {
@@ -257,7 +321,7 @@ namespace {
 	// centred on the Avatar, with party / NPC dots and the top screen's view
 	// outlined. Tap a spot to walk there (Exult's pathfinding).
 	constexpr int MM_SCALE = 2;
-	constexpr int MM_W     = SIDE_X;    // leave the column for the side buttons
+	constexpr int MM_W     = VIEW_W;    // same area as the live view
 	constexpr int MM_H     = PAD_H - 2;
 	constexpr int MM_TW = MM_W / MM_SCALE, MM_TH = MM_H / MM_SCALE;
 
@@ -405,6 +469,7 @@ namespace {
 		}
 	}
 	void draw_pad(Game_window* gwin, Conversation* conv) {
+		view_visible = false;
 		buf->fill8(C_DIM, W, PAD_H, 0, PAD_Y);
 		buf->fill8(C_EDGE, W, 1, 0, PAD_Y);
 
@@ -438,16 +503,16 @@ namespace {
 		answer_page = 0;
 
 		if (show_help) {
-			static const char* lines[] = {"Touch middle area: point + click (top screen)",
-										  "C-Stick: cursor   Circle Pad: walk",
-										  "A click/drag   B walk to cursor   X use/talk",
-										  "Y inventory   D-Pad up Map, down Stats",
-										  "D-Pad left/right: jump to nearby people/items",
-										  "R combat  ZL keys  ZR target  START menu",
-										  "SELECT quicksave   L+SELECT quick-restore",
-										  "Hold L: D-Pad Watch Pause Lockpick Food",
-										  "map button: minimap - tap it to walk there",
-										  "Portrait: inventory    3D slider: depth"};
+			static const char* lines[] = {"Tap the picture: click there   Double-tap: use/talk",
+										  "Hold the stylus still: walk there   Drag: move items",
+										  "C-Stick cursor  Circle Pad walk  A click  X use",
+										  "B walk to cursor   Y inventory   R combat",
+										  "D-Pad: up Map, down Stats, left/right next target",
+										  "ZL keys   ZR target   START menu   SELECT save",
+										  "Hold L + D-Pad: Watch Pause Lockpick Food",
+										  "L+SELECT quick-restore   L+X next song",
+										  "map: minimap, tap to walk   Portrait: inventory",
+										  "3D slider: depth (off at the bottom)"};
 			int y = PAD_Y + 6;
 			for (const char* l : lines) {
 				text(5, l, 6, y);
@@ -457,45 +522,67 @@ namespace {
 			return;
 		}
 
-		// Side buttons: "?" help and "map" minimap toggle.
-		buf->fill8(C_BG, W - SIDE_X, PAD_H - 1, SIDE_X, PAD_Y + 1);
-		panel(W - 28, PAD_Y + 8, 26, 22, pressed_id == 297);
-		text_centered(0, "?", W - 15, PAD_Y + 13);
-		hits.push_back({W - 30, PAD_Y + 4, 30, 30, SDLK_UNKNOWN, SDL_KMOD_NONE, 297});
-		panel(W - 28, PAD_Y + 38, 26, 22, minimap_on || pressed_id == 296);
-		text_centered(5, "map", W - 15, PAD_Y + 45);
-		hits.push_back({W - 30, PAD_Y + 34, 30, 30, SDLK_UNKNOWN, SDL_KMOD_NONE, 296});
-
-		if (minimap_on) {
-			draw_minimap(gwin);
-			hits.push_back({0, PAD_Y, MM_W + 2, PAD_H, SDLK_UNKNOWN, SDL_KMOD_NONE, 295});    // tap = walk there
-			return;
-		}
-
-		// Touchpad: time of day + what's under the cursor
-		char       tbuf[64];
-		Game_clock* clk = gwin->get_clock();
-		if (clk) {
-			int        h    = clk->get_hour();
-			const char* ap  = h < 12 ? "AM" : "PM";
-			int        h12 = h % 12 == 0 ? 12 : h % 12;
-			std::snprintf(tbuf, sizeof tbuf, "Day %d   %d:%02d %s", clk->get_day() + 1, h12, clk->get_minute(), ap);
-			text(5, tbuf, 6, PAD_Y + 5);
+		// Right-hand column: time, combat state, what the cursor is on, and
+		// the "?" / "map" buttons.
+		buf->fill8(C_BG, SIDE_W, PAD_H - 1, SIDE_X, PAD_Y + 1);
+		buf->fill8(C_EDGE, 1, PAD_H - 1, SIDE_X - 1, PAD_Y + 1);
+		const int sx = SIDE_X + 4, sw = SIDE_W - 8;
+		if (Game_clock* clk = gwin->get_clock()) {
+			char       tbuf[32];
+			const int  h   = clk->get_hour();
+			std::snprintf(tbuf, sizeof tbuf, "Day %d", clk->get_day() + 1);
+			text(5, tbuf, sx, PAD_Y + 4);
+			std::snprintf(tbuf, sizeof tbuf, "%d:%02d %s", h % 12 == 0 ? 12 : h % 12, clk->get_minute(), h < 12 ? "AM" : "PM");
+			text(5, tbuf, sx, PAD_Y + 14);
 		}
 		if (gwin->in_combat()) {
-			text(5, Combat::is_paused() ? "COMBAT (paused)" : "COMBAT", 180, PAD_Y + 5);
+			buf->fill8(C_RED, sw, 11, sx - 1, PAD_Y + 26);
+			text(5, Combat::is_paused() ? "COMBAT-PAUSED" : "COMBAT", sx + 1, PAD_Y + 28);
 		}
-		Gump_manager* gm = gwin->get_gump_man();
-		Mouse*        m  = Mouse::mouse();
-		if (m && gm && !gm->find_gump(m->get_mousex(), m->get_mousey())) {
-			if (Game_object* obj = gwin->find_object(m->get_mousex(), m->get_mousey())) {
+		{
+			Gump_manager* gm = gwin->get_gump_man();
+			Mouse*        m  = Mouse::mouse();
+			Game_object*  obj = nullptr;
+			if (m && gm) {
+				const int mx = m->get_mousex(), my = m->get_mousey();
+				if (Gump* g = gm->find_gump(mx, my)) {
+					int gx, gy;
+					gm->map_game_to_gump(g, mx, my, gx, gy);
+					obj = g->find_object(gx, gy);
+				} else {
+					obj = gwin->find_object(mx, my);
+				}
+			}
+			if (obj) {
 				const std::string n = obj->get_name();
-				if (!n.empty()) {
-					text_centered(0, n.c_str(), SIDE_X / 2, PAD_Y + PAD_H / 2 - 6, SIDE_X - 12);
+				int               y = text_wrapped(0, n, sx, PAD_Y + 42, sw, 3, 11);
+				if (Actor* a = obj->as_actor()) {    // people: show their health
+					if (!a->is_dead()) {
+						bar(sx, y + 2, sw, a->get_effective_prop(Actor::health), a->get_effective_prop(Actor::strength), C_RED);
+					}
+				} else if (obj->get_quantity() > 1) {
+					char qbuf[16];
+					std::snprintf(qbuf, sizeof qbuf, "x%d", obj->get_quantity());
+					text(5, qbuf, sx, y + 1);
 				}
 			}
 		}
-		text_centered(5, "touch here to point and click", SIDE_X / 2, PAD_Y + PAD_H - 14);
+		const int bw = (sw - 4) / 2, by = PAD_Y + PAD_H - 28;
+		panel(sx - 1, by, bw, 24, pressed_id == 297);
+		text_centered(0, "?", sx - 1 + bw / 2, by + 6);
+		hits.push_back({sx - 2, by - 2, bw + 3, 28, SDLK_UNKNOWN, SDL_KMOD_NONE, 297});
+		panel(sx + bw + 3, by, bw, 24, minimap_on || pressed_id == 296);
+		text_centered(5, "map", sx + bw + 3 + bw / 2, by + 8);
+		hits.push_back({sx + bw + 2, by - 2, bw + 4, 28, SDLK_UNKNOWN, SDL_KMOD_NONE, 296});
+
+		if (minimap_on) {
+			draw_minimap(gwin);
+			hits.push_back({0, PAD_Y, MM_W, PAD_H, SDLK_UNKNOWN, SDL_KMOD_NONE, 295});    // tap = walk there
+			return;
+		}
+		// Live picture of the top screen (drawn into the framebuffer by
+		// blit_view); touching it points and clicks at that spot.
+		view_visible = true;
 	}
 
 	void draw_bar(Game_window* gwin) {
@@ -620,6 +707,37 @@ namespace {
 	}
 }    // namespace
 
+// Called by SDL's 3DS backend with every finished top-screen frame (the
+// window surface, RGBA8888, game pixels 1:1). Keeps a ~15 fps, 2x2-filtered
+// RGB565 copy for the bottom screen's live view.
+extern "C" void N3DS_TopFrame(const void* src, int sw, int sh, int pitch, int bpp) {
+	if (!view_visible || bpp != 4 || sw < 2 || sh < 2) {
+		return;
+	}
+	const uint64_t now = SDL_GetTicks();
+	if (now - view_last < 66) {
+		return;
+	}
+	view_last = now;
+	const auto* base = static_cast<const uint8_t*>(src);
+	for (int ty = 0; ty < PAD_H; ty++) {
+		const int       sy = std::min(ty * sh / PAD_H, sh - 2);
+		const uint32_t* r0 = reinterpret_cast<const uint32_t*>(base + static_cast<size_t>(sy) * pitch);
+		const uint32_t* r1 = reinterpret_cast<const uint32_t*>(base + static_cast<size_t>(sy + 1) * pitch);
+		uint16_t*       out = view_px + ty * VIEW_W;
+		for (int tx = 0; tx < VIEW_W; tx++) {
+			const int      sx = std::min(tx * sw / VIEW_W, sw - 2);
+			const uint32_t a = r0[sx], b = r0[sx + 1], c = r1[sx], d = r1[sx + 1];
+			// RGBA8888: R in bits 24-31, G 16-23, B 8-15
+			const unsigned rr = ((a >> 24) + (b >> 24) + (c >> 24) + (d >> 24)) >> 2;
+			const unsigned gg = (((a >> 16) & 255) + ((b >> 16) & 255) + ((c >> 16) & 255) + ((d >> 16) & 255)) >> 2;
+			const unsigned bb = (((a >> 8) & 255) + ((b >> 8) & 255) + ((c >> 8) & 255) + ((d >> 8) & 255)) >> 2;
+			out[tx]           = static_cast<uint16_t>(((rr >> 3) << 11) | ((gg >> 2) << 5) | (bb >> 3));
+		}
+	}
+	view_new = true;
+}
+
 extern "C" void N3DS_CycleTarget(int dir) {    // from SDL's input layer
 	pending_cycle += dir;
 }
@@ -650,6 +768,11 @@ void n3ds_bottom_tick() {
 		last_draw               = 0;
 	}
 	if (mode == GAME && now - last_draw < 100) {
+		if (view_visible && view_new) {    // refresh just the live view between UI redraws
+			auto* fb = reinterpret_cast<uint16_t*>(gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, nullptr, nullptr));
+			blit_view(fb);
+			GSPGPU_FlushDataCache(fb, W * H * 2);
+		}
 		return;
 	}
 	last_draw = now;
@@ -741,7 +864,7 @@ extern "C" int N3DS_BottomTouch(int phase, int x, int y, float* nx, float* ny) {
 		}
 		return 1;
 	}
-	float fx = x / static_cast<float>(SIDE_X), fy = (y - PAD_Y) / static_cast<float>(PAD_H);
+	float fx = x / static_cast<float>(VIEW_W), fy = (y - PAD_Y) / static_cast<float>(PAD_H);
 	*nx      = fx < 0 ? 0 : fx > 1 ? 1 : fx;
 	*ny      = fy < 0 ? 0 : fy > 1 ? 1 : fy;
 	return 0;

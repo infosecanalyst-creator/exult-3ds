@@ -18,7 +18,7 @@ index 3487c67..4c28367 100644
      if (!aptMainLoop()) {
          SDL_Event ev;
 diff --git a/src/video/n3ds/SDL_n3dsframebuffer.c b/src/video/n3ds/SDL_n3dsframebuffer.c
-index 41813a1..f4afdce 100644
+index 41813a1..8b8ac54 100644
 --- a/src/video/n3ds/SDL_n3dsframebuffer.c
 +++ b/src/video/n3ds/SDL_n3dsframebuffer.c
 @@ -39,7 +39,6 @@ static void CopyFramebuffertoN3DS_24(u8  *dest, const Dimensions dest_dim, const
@@ -29,11 +29,18 @@ index 41813a1..f4afdce 100644
  
  
  bool SDL_N3DS_CreateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window, SDL_PixelFormat *format, void **pixels, int *pitch)
-@@ -65,6 +64,15 @@ bool SDL_N3DS_CreateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window
+@@ -65,6 +64,22 @@ bool SDL_N3DS_CreateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window
      return true;
  }
  
 +static bool stereo_on = false;
++
++/* Default: nothing. Exult-3DS uses this to show a live picture of the top
++   screen on the touchscreen (tap where you see). */
++__attribute__((weak)) void N3DS_TopFrame(const void *src, int sw, int sh, int pitch, int bpp)
++{
++    (void)src; (void)sw; (void)sh; (void)pitch; (void)bpp;
++}
 +
 +/* Default: no right-eye image (both eyes see the left one). */
 +__attribute__((weak)) int N3DS_StereoFrame(const void *src, int sw, int sh, int pitch, int bpp, void *rightfb, int fbw, int fbh, float slider)
@@ -45,11 +52,15 @@ index 41813a1..f4afdce 100644
  bool SDL_N3DS_UpdateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window, const SDL_Rect *rects, int numrects)
  {
      SDL_WindowData *drv_data = window->internal;
-@@ -91,7 +99,30 @@ bool SDL_N3DS_UpdateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window
+@@ -91,7 +106,34 @@ bool SDL_N3DS_UpdateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window
      else
          CopyFramebuffertoN3DS_32(framebuffer, (Dimensions){ width, height },
                                   surface->pixels, (Dimensions){ surface->w, surface->h });
 -    FlushN3DSBuffer(framebuffer, bufsize, drv_data->screen);
++    if (drv_data->screen == GFX_TOP) {
++        N3DS_TopFrame(surface->pixels, surface->w, surface->h, surface->pitch, SDL_BYTESPERPIXEL(surface->format));
++    }
++
 +    // Stereoscopic 3D: while the 3D slider is up, ask the app for a
 +    // right-eye image (Exult-3DS builds one from its height map). Apps that
 +    // don't provide one get the left image on both eyes.
@@ -77,7 +88,7 @@ index 41813a1..f4afdce 100644
  
      return true;
  }
-@@ -147,12 +178,6 @@ static int GetSourceOffset(int x, int y, int source_width)
+@@ -147,12 +189,6 @@ static int GetSourceOffset(int x, int y, int source_width)
      return x + y * source_width;
  }
  
