@@ -44,5 +44,7 @@ jobs:
         run: |
           cd dist
           zip -r "exult-3ds-${GITHUB_REF_NAME}.zip" exult-3ds
-          gh release create "$GITHUB_REF_NAME" "exult-3ds-${GITHUB_REF_NAME}.zip" \
+          pre=""
+          case "$GITHUB_REF_NAME" in *-*) pre="--prerelease" ;; esac   # v0.1.0-rc1 etc.
+          gh release create "$GITHUB_REF_NAME" "exult-3ds-${GITHUB_REF_NAME}.zip" $pre \
             --title "Exult for New 3DS ${GITHUB_REF_NAME}" --generate-notes
