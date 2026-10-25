@@ -1,0 +1,406 @@
+diff --git a/src/video/n3ds/SDL_n3dsevents.c b/src/video/n3ds/SDL_n3dsevents.c
+index 3487c67..4c28367 100644
+--- a/src/video/n3ds/SDL_n3dsevents.c
++++ b/src/video/n3ds/SDL_n3dsevents.c
+@@ -27,11 +27,13 @@
+ #include "../../events/SDL_events_c.h"
+ #include "SDL_n3dsevents_c.h"
+ #include "SDL_n3dstouch.h"
++#include "SDL_n3dsvinput.h"
+ 
+ void N3DS_PumpEvents(SDL_VideoDevice *_this)
+ {
+     hidScanInput();
+-    N3DS_PollTouch(_this);
++    /* Exult-3DS: touch drives a virtual mouse on the top-screen window */
++    N3DS_PollVirtualInput(_this);
+ 
+     if (!aptMainLoop()) {
+         SDL_Event ev;
+diff --git a/src/video/n3ds/SDL_n3dsframebuffer.c b/src/video/n3ds/SDL_n3dsframebuffer.c
+index 41813a1..f4afdce 100644
+--- a/src/video/n3ds/SDL_n3dsframebuffer.c
++++ b/src/video/n3ds/SDL_n3dsframebuffer.c
+@@ -39,7 +39,6 @@ static void CopyFramebuffertoN3DS_24(u8  *dest, const Dimensions dest_dim, const
+ static void CopyFramebuffertoN3DS_32(u32 *dest, const Dimensions dest_dim, const u32 *source, const Dimensions source_dim);
+ static int GetDestOffset(int x, int y, int dest_width);
+ static int GetSourceOffset(int x, int y, int source_width);
+-static void FlushN3DSBuffer(const void *buffer, u32 bufsize, gfxScreen_t screen);
+ 
+ 
+ bool SDL_N3DS_CreateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window, SDL_PixelFormat *format, void **pixels, int *pitch)
+@@ -65,6 +64,15 @@ bool SDL_N3DS_CreateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window
+     return true;
+ }
+ 
++static bool stereo_on = false;
++
++/* Default: no right-eye image (both eyes see the left one). */
++__attribute__((weak)) int N3DS_StereoFrame(const void *src, int sw, int sh, int pitch, int bpp, void *rightfb, int fbw, int fbh, float slider)
++{
++    (void)src; (void)sw; (void)sh; (void)pitch; (void)bpp; (void)rightfb; (void)fbw; (void)fbh; (void)slider;
++    return 0;
++}
++
+ bool SDL_N3DS_UpdateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window, const SDL_Rect *rects, int numrects)
+ {
+     SDL_WindowData *drv_data = window->internal;
+@@ -91,7 +99,30 @@ bool SDL_N3DS_UpdateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window
+     else
+         CopyFramebuffertoN3DS_32(framebuffer, (Dimensions){ width, height },
+                                  surface->pixels, (Dimensions){ surface->w, surface->h });
+-    FlushN3DSBuffer(framebuffer, bufsize, drv_data->screen);
++    // Stereoscopic 3D: while the 3D slider is up, ask the app for a
++    // right-eye image (Exult-3DS builds one from its height map). Apps that
++    // don't provide one get the left image on both eyes.
++    if (drv_data->screen == GFX_TOP) {
++        const float slider = osGet3DSliderState();
++        if (slider > 0.0f && SDL_BYTESPERPIXEL(surface->format) == 4) {
++            u16 rw, rh;
++            void *right;
++            if (!stereo_on) {
++                gfxSet3D(true);
++                stereo_on = true;
++            }
++            right = gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, &rw, &rh);
++            if (!N3DS_StereoFrame(surface->pixels, surface->w, surface->h, surface->pitch, 4, right, rw, rh, slider)) {
++                SDL_memcpy(right, framebuffer, bufsize);
++            }
++            GSPGPU_FlushDataCache(right, bufsize);
++        } else if (stereo_on) {
++            gfxSet3D(false);
++            stereo_on = false;
++        }
++    }
++    GSPGPU_FlushDataCache(framebuffer, bufsize);
++    gfxScreenSwapBuffers(drv_data->screen, drv_data->screen == GFX_TOP && stereo_on);
+ 
+     return true;
+ }
+@@ -147,12 +178,6 @@ static int GetSourceOffset(int x, int y, int source_width)
+     return x + y * source_width;
+ }
+ 
+-static void FlushN3DSBuffer(const void *buffer, u32 bufsize, gfxScreen_t screen)
+-{
+-    GSPGPU_FlushDataCache(buffer, bufsize);
+-    gfxScreenSwapBuffers(screen, false);
+-}
+-
+ void SDL_N3DS_DestroyWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window)
+ {
+     SDL_ClearProperty(SDL_GetWindowProperties(window), N3DS_SURFACE);
+diff --git a/src/video/n3ds/SDL_n3dsswkb.c b/src/video/n3ds/SDL_n3dsswkb.c
+index dd54a4c..33b4533 100644
+--- a/src/video/n3ds/SDL_n3dsswkb.c
++++ b/src/video/n3ds/SDL_n3dsswkb.c
+@@ -26,6 +26,8 @@
+ #include <3ds.h>
+ 
+ #include "SDL_n3dsswkb.h"
++#include "../SDL_sysvideo.h"
++#include "../../events/SDL_keyboard_c.h"
+ 
+ static SwkbdState sw_keyboard;
+ static const size_t BUFFER_SIZE = 256;
+@@ -56,9 +58,26 @@ bool N3DS_StartTextInput(SDL_VideoDevice *_this, SDL_Window *window, SDL_Propert
+     SwkbdButton button_pressed;
+     button_pressed = swkbdInputText(&sw_keyboard, buffer, BUFFER_SIZE);
+     if (button_pressed == SWKBD_BUTTON_CONFIRM) {
+-        SDL_SendKeyboardText(buffer);
++        /* Exult-3DS fix: SDL only marks text input active after this returns,
++           so SDL_SendKeyboardText() would drop the text. Mark it active first,
++           and send one UTF-8 character per event (Exult reads one char each). */
++        window->text_input_active = true;
++        const char *p = buffer;
++        while (*p) {
++            char one[5] = { 0 };
++            size_t n = 1;
++            unsigned char c = (unsigned char)*p;
++            if (c >= 0xF0) n = 4; else if (c >= 0xE0) n = 3; else if (c >= 0xC0) n = 2;
++            for (size_t i = 0; i < n && p[i]; i++) one[i] = p[i];
++            SDL_SendKeyboardText(one);
++            p += SDL_strlen(one);
++        }
+     }
+-    return true;
++    /* The 3DS keyboard is modal and already closed, so leave text input
++       inactive: the next tap on a text field opens the keyboard again
++       (returning false stops SDL from marking it active). */
++    window->text_input_active = false;
++    return false;
+ }
+ 
+ bool N3DS_StopTextInput(SDL_VideoDevice *_this, SDL_Window *window)
+diff --git a/src/video/n3ds/SDL_n3dsvinput.c b/src/video/n3ds/SDL_n3dsvinput.c
+new file mode 100644
+index 0000000..13e6c75
+--- /dev/null
++++ b/src/video/n3ds/SDL_n3dsvinput.c
+@@ -0,0 +1,255 @@
++/*
++  Exult-3DS virtual input layer for SDL3's N3DS backend.
++
++  The 3DS has no mouse or keyboard, and Exult (Ultima VII) is a mouse-driven
++  game. This file turns the 3DS controls into a virtual mouse + keyboard that
++  target the game window on the TOP screen:
++
++    Touchscreen (bottom)  absolute cursor on the top screen; touch = left button
++    C-Stick (New 3DS)     moves the cursor (relative, accelerating)
++    A                     left mouse button   (select / hold to drag)
++    B                     right mouse button  (hold to walk toward cursor)
++    X                     double left-click   (use / talk)
++    Y                     I  inventory
++    D-Pad                 up M map, down Z stats, left B spellbook, right N notebook
++    L + D-Pad             up W watch, down SPACE pause combat, left P lockpick, right F food
++    R                     C  toggle combat
++    ZL                    K  try keys (Keyring)
++    ZR                    T  target mode
++    START                 ESC  game menu / close gumps
++    SELECT                Ctrl-S quicksave     L+SELECT  Ctrl-R quickrestore
++    L + Y                 H  help    L + X  Alt-M next song
++
++  The Circle Pad is left to SDL's joystick driver: Exult already walks the
++  Avatar with the left analog stick.
++
++  Uses SDL-internal SDL_SendMouse* / SDL_SendKeyboardKey so that
++  SDL_GetMouseState() and modifier state stay consistent (Exult relies on them).
++*/
++#include "SDL_internal.h"
++
++#ifdef SDL_VIDEO_DRIVER_N3DS
++
++#include <3ds.h>
++
++#include "../../events/SDL_events_c.h"
++#include "../../events/SDL_keyboard_c.h"
++#include "../../events/SDL_mouse_c.h"
++#include "../SDL_sysvideo.h"
++#include "SDL_n3dsvinput.h"
++
++#define VIN_MOUSE_ID   SDL_DEFAULT_MOUSE_ID
++#define VIN_KBD_ID     SDL_DEFAULT_KEYBOARD_ID
++#define BOTTOM_W       320.0f
++#define BOTTOM_H       240.0f
++
++static float cursor_x = 200.0f, cursor_y = 120.0f;
++static bool  touch_down = false;
++static int   touch_frames = 0;
++static bool  touch_active = false;
++static bool  touch_consumed = false;
++static int   last_px = 0, last_py = 0;
++
++static SDL_Window *TopWindow(void);
++static void ClampCursor(SDL_Window *win);
++
++/* Default: D-pad left/right does nothing. Exult-3DS overrides this. */
++__attribute__((weak)) void N3DS_CycleTarget(int dir)
++{
++    (void)dir;
++}
++
++/* Let the app place the cursor (e.g. snapping to a target). */
++void N3DS_SetCursor(float x, float y)
++{
++    SDL_Window *win = TopWindow();
++    if (!win) {
++        return;
++    }
++    cursor_x = x;
++    cursor_y = y;
++    ClampCursor(win);
++    SDL_SendMouseMotion(0, win, VIN_MOUSE_ID, false, cursor_x, cursor_y);
++}
++
++/* Default: whole bottom screen is a touchpad. Exult-3DS overrides this. */
++__attribute__((weak)) int N3DS_BottomTouch(int phase, int x, int y, float *nx, float *ny)
++{
++    (void)phase;
++    *nx = x / BOTTOM_W;
++    *ny = y / BOTTOM_H;
++    return 0;
++}
++static Uint32 l_layer_used = 0;
++
++static SDL_Window *TopWindow(void)
++{
++    SDL_VideoDevice *dev = SDL_GetVideoDevice();
++    SDL_Window *w;
++    if (!dev) {
++        return NULL;
++    }
++    for (w = dev->windows; w; w = w->next) {
++        if (!w->is_destroying) {
++            return w; /* Exult creates exactly one window, on the top screen */
++        }
++    }
++    return NULL;
++}
++
++static void ClampCursor(SDL_Window *win)
++{
++    float maxx = (float)(win->w - 1), maxy = (float)(win->h - 1);
++    if (cursor_x < 0) cursor_x = 0;
++    if (cursor_y < 0) cursor_y = 0;
++    if (cursor_x > maxx) cursor_x = maxx;
++    if (cursor_y > maxy) cursor_y = maxy;
++}
++
++static void Key(SDL_Scancode sc, bool down)
++{
++    SDL_SendKeyboardKey(0, VIN_KBD_ID, 0, sc, down);
++}
++
++static void TapKey(SDL_Scancode mod, SDL_Scancode sc)
++{
++    if (mod != SDL_SCANCODE_UNKNOWN) Key(mod, true);
++    Key(sc, true);
++    Key(sc, false);
++    if (mod != SDL_SCANCODE_UNKNOWN) Key(mod, false);
++}
++
++static void MouseButton(SDL_Window *win, Uint8 button, bool down)
++{
++    SDL_SendMouseMotion(0, win, VIN_MOUSE_ID, false, cursor_x, cursor_y);
++    SDL_SendMouseButton(0, win, VIN_MOUSE_ID, button, down);
++}
++
++void N3DS_PollVirtualInput(SDL_VideoDevice *_this)
++{
++    SDL_Window *win = TopWindow();
++    u32 kDown, kUp, kHeld;
++    touchPosition touch;
++    circlePosition cstick;
++    bool layer;
++
++    (void)_this;
++    if (!win) {
++        return;
++    }
++
++    kDown = hidKeysDown();
++    kUp   = hidKeysUp();
++    kHeld = hidKeysHeld();
++    layer = (kHeld & KEY_L) != 0;
++
++    /* --- Touchscreen ---
++       The app may claim parts of the bottom screen for its own UI through
++       N3DS_BottomTouch(); everything else is a touchpad for the top-screen
++       cursor (touch = left button). */
++    hidTouchRead(&touch);
++    if (kHeld & KEY_TOUCH) {
++        float nx = 0, ny = 0;
++        int phase = touch_active ? 1 : 0;
++        int consumed = N3DS_BottomTouch(phase, touch.px, touch.py, &nx, &ny);
++        if (!touch_active) {
++            touch_active = true;
++            touch_consumed = consumed != 0;
++        }
++        last_px = touch.px;
++        last_py = touch.py;
++        if (!touch_consumed) {
++            cursor_x = nx * win->w;
++            cursor_y = ny * win->h;
++            ClampCursor(win);
++            SDL_SendMouseMotion(0, win, VIN_MOUSE_ID, false, cursor_x, cursor_y);
++            /* Press one frame after the cursor arrives, like a real mouse:
++               menus highlight on motion and only accept a click on the
++               hovered item. */
++            if (touch_frames < 2 && ++touch_frames == 2) {
++                touch_down = true;
++                SDL_SendMouseButton(0, win, VIN_MOUSE_ID, SDL_BUTTON_LEFT, true);
++            }
++        }
++    } else if (touch_active) {
++        float nx = 0, ny = 0;
++        N3DS_BottomTouch(2, last_px, last_py, &nx, &ny);
++        if (!touch_consumed) {
++            if (touch_frames == 1) {   /* very quick tap: still click */
++                SDL_SendMouseButton(0, win, VIN_MOUSE_ID, SDL_BUTTON_LEFT, true);
++                touch_down = true;
++            }
++            if (touch_down) {
++                SDL_SendMouseButton(0, win, VIN_MOUSE_ID, SDL_BUTTON_LEFT, false);
++            }
++        }
++        touch_down = false;
++        touch_frames = 0;
++        touch_active = false;
++        touch_consumed = false;
++    }
++
++    /* --- C-Stick: relative cursor with simple acceleration --- */
++    hidCstickRead(&cstick);
++    if (cstick.dx * cstick.dx + cstick.dy * cstick.dy > 15 * 15) {
++        float sx = cstick.dx / 156.0f, sy = -cstick.dy / 156.0f;
++        float speed = 2.0f + 6.0f * (sx * sx + sy * sy);
++        cursor_x += sx * speed;
++        cursor_y += sy * speed;
++        ClampCursor(win);
++        SDL_SendMouseMotion(0, win, VIN_MOUSE_ID, false, cursor_x, cursor_y);
++    }
++
++    /* --- Mouse buttons --- */
++    if (kDown & KEY_A) MouseButton(win, SDL_BUTTON_LEFT, true);
++    if (kUp & KEY_A)   MouseButton(win, SDL_BUTTON_LEFT, false);
++    if (kDown & KEY_B) MouseButton(win, SDL_BUTTON_RIGHT, true);
++    if (kUp & KEY_B)   MouseButton(win, SDL_BUTTON_RIGHT, false);
++
++    if (kDown & KEY_X) {
++        if (layer) {
++            TapKey(SDL_SCANCODE_LALT, SDL_SCANCODE_M);
++            l_layer_used = 1;
++        } else {
++            MouseButton(win, SDL_BUTTON_LEFT, true);
++            MouseButton(win, SDL_BUTTON_LEFT, false);
++            MouseButton(win, SDL_BUTTON_LEFT, true);
++            MouseButton(win, SDL_BUTTON_LEFT, false);
++        }
++    }
++
++    /* --- Keyboard shortcuts --- */
++    if (kDown & KEY_Y) {
++        if (layer) { TapKey(SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_H); l_layer_used = 1; }
++        else TapKey(SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_I);
++    }
++    if (kDown & KEY_DUP) {
++        TapKey(SDL_SCANCODE_UNKNOWN, layer ? SDL_SCANCODE_W : SDL_SCANCODE_M);
++        if (layer) l_layer_used = 1;
++    }
++    if (kDown & KEY_DDOWN) {
++        TapKey(SDL_SCANCODE_UNKNOWN, layer ? SDL_SCANCODE_SPACE : SDL_SCANCODE_Z);
++        if (layer) l_layer_used = 1;
++    }
++    if (kDown & KEY_DLEFT) {
++        if (layer) { TapKey(SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_P); l_layer_used = 1; }
++        else N3DS_CycleTarget(-1);   /* previous nearby person/object */
++    }
++    if (kDown & KEY_DRIGHT) {
++        if (layer) { TapKey(SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_F); l_layer_used = 1; }
++        else N3DS_CycleTarget(+1);   /* next nearby person/object */
++    }
++    if (kDown & KEY_R)     TapKey(SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_C);
++    if (kDown & KEY_ZL)    TapKey(SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_K);
++    if (kDown & KEY_ZR)    TapKey(SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_T);
++    if (kDown & KEY_START) TapKey(SDL_SCANCODE_UNKNOWN, SDL_SCANCODE_ESCAPE);
++    if (kDown & KEY_SELECT) {
++        TapKey(SDL_SCANCODE_LCTRL, layer ? SDL_SCANCODE_R : SDL_SCANCODE_S);
++        if (layer) l_layer_used = 1;
++    }
++    if (kUp & KEY_L) {
++        l_layer_used = 0;
++    }
++}
++
++#endif /* SDL_VIDEO_DRIVER_N3DS */
+diff --git a/src/video/n3ds/SDL_n3dsvinput.h b/src/video/n3ds/SDL_n3dsvinput.h
+new file mode 100644
+index 0000000..b203e94
+--- /dev/null
++++ b/src/video/n3ds/SDL_n3dsvinput.h
+@@ -0,0 +1,5 @@
++#ifndef SDL_n3dsvinput_h_
++#define SDL_n3dsvinput_h_
++#include "../SDL_sysvideo.h"
++void N3DS_PollVirtualInput(SDL_VideoDevice *_this);
++#endif

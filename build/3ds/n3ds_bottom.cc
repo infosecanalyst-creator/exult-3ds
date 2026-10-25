@@ -1,0 +1,748 @@
+/*
+ * Exult for New Nintendo 3DS - bottom-screen companion.
+ *
+ * While a game is running, the bottom screen becomes:
+ *   - Party strip (top):    a portrait per party member with HP/mana bars and
+ *                           status colouring. Tap = that member's inventory.
+ *   - Middle:               a touchpad for the top-screen cursor, showing the
+ *                           game time and the name of whatever is under the
+ *                           cursor. During conversations it turns into large
+ *                           answer buttons. "?" shows the controls.
+ *                           "map" turns it into a live minimap of the area
+ *                           around the party; tap a spot to walk there.
+ *   - Action bar (bottom):  Map, Spells, Notes, Keys, Pack / Combat, Target,
+ *                           Food, Save, Menu - using Exult's shortcut-bar art.
+ *
+ * Everything is drawn with Exult's own shapes, fonts and palette into an
+ * 8-bit buffer and converted to the bottom framebuffer (RGB565) ~10x/sec.
+ * Touches arrive from SDL's N3DS virtual-input layer via N3DS_BottomTouch().
+ *
+ * GPL v2 (same as Exult).
+ */
+#include <3ds.h>
+
+#include "Gump_manager.h"
+#include "actors.h"
+#include "combat_opts.h"
+#include "chunkter.h"
+#include "conversation.h"
+#include "effects.h"
+#include "gamemap.h"
+#include "schedule.h"
+#include "font.h"
+#include "gameclk.h"
+#include "gamewin.h"
+#include "ibuf8.h"
+#include "mouse.h"
+#include "palette.h"
+#include "party.h"
+#include "shapeid.h"
+#include "shapeinf.h"
+#include "shapeinf/npcdollinf.h"
+#include "ucmachine.h"
+#include "exult_constants.h"
+#include "vgafile.h"
+#include "n3ds_stereo.h"
+
+#ifdef __GNUC__
+#	pragma GCC diagnostic push
+#	pragma GCC diagnostic ignored "-Wold-style-cast"
+#endif
+#include <SDL3/SDL.h>
+#ifdef __GNUC__
+#	pragma GCC diagnostic pop
+#endif
+
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
+#include <cstdlib>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+#ifndef N3DS_AUTOSAVE_MS
+#	define N3DS_AUTOSAVE_MS (15 * 60 * 1000)
+#endif
+
+extern "C" void N3DS_SetCursor(float x, float y);
+
+namespace {
+	constexpr int W = 320;
+	constexpr int H = 240;
+
+	constexpr int PARTY_Y = 0, PARTY_H = 46;
+	constexpr int PAD_Y = PARTY_H, PAD_H = 136;
+	constexpr int BAR_Y = PAD_Y + PAD_H, BAR_H = H - BAR_Y;    // 58
+	constexpr int SIDE_X = W - 32;    // right-hand column of the middle area: "?" and "map" buttons;
+									  // the touchpad is everything left of it
+
+	constexpr int SB_COMBAT = 0, SB_DISK = 1, SB_KEYRING = 3, SB_SPELLBOOK = 4, SB_TARGET = 5, SB_FOOD = 6, SB_MAPS = 8,
+				  SB_NOTEBOOK = 9, SB_BACKPACK = 10;
+
+	struct Hit {
+		int         x, y, w, h;
+		SDL_Keycode key;
+		SDL_Keymod  mod;
+		int         id;    // >= 0: button id for highlight
+	};
+
+	enum Mode { LEGEND, GAME };
+
+	Mode                mode = LEGEND;
+	Image_buffer8*      buf  = nullptr;
+	uint16_t            rgb[256];
+	bool                day_pal_cached = false;
+	uint64_t            last_draw      = 0;
+	std::vector<Hit>    hits;           // rebuilt each draw, read by the touch hook
+	bool                choices_shown = false;
+	int                 answer_page   = 0;
+	bool                show_help     = false;
+	int                 pressed_id    = -1;
+	int                 touch_hit     = -1;    // index into hits for the current UI touch
+	bool                touch_ui      = false;
+	bool                minimap_on    = false;
+	unsigned char       C_BG, C_PANEL, C_PANEL_HI, C_EDGE, C_RED, C_BLUE, C_GREEN, C_DIM, C_TEXT;
+
+	unsigned char nearest(int r, int g, int b) {
+		int best = 0, bestd = 1 << 30;
+		for (int i = 0; i < 256; i++) {
+			const int cr = (rgb[i] >> 11) << 3, cg = ((rgb[i] >> 5) & 63) << 2, cb = (rgb[i] & 31) << 3;
+			const int d  = (cr - r) * (cr - r) + (cg - g) * (cg - g) + (cb - b) * (cb - b);
+			if (d < bestd) {
+				bestd = d;
+				best  = i;
+			}
+		}
+		return static_cast<unsigned char>(best);
+	}
+
+	void load_palette(Game_window* gwin) {
+		Palette*  pal = gwin->get_pal();
+		const int mx  = pal->get_max_val() > 0 ? pal->get_max_val() : 63;
+		for (int i = 0; i < 256; i++) {
+			const int r = pal->get_red(i) * 255 / mx, g = pal->get_green(i) * 255 / mx, b = pal->get_blue(i) * 255 / mx;
+			rgb[i]      = static_cast<uint16_t>(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
+		}
+		C_BG       = nearest(18, 14, 10);
+		C_PANEL    = nearest(70, 50, 30);
+		C_PANEL_HI = nearest(150, 110, 50);
+		C_EDGE     = nearest(120, 90, 50);
+		C_RED      = 22;
+		C_GREEN    = 64;
+		C_BLUE     = 79;
+		C_DIM      = nearest(40, 32, 24);
+		C_TEXT     = nearest(230, 220, 190);
+	}
+
+	void blit() {
+		auto*                fb  = reinterpret_cast<uint16_t*>(gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, nullptr, nullptr));
+		const unsigned char* src = buf->get_bits();
+		const int            lw  = buf->get_line_width();
+		for (int y = 0; y < H; y++) {
+			const unsigned char* row = src + y * lw;
+			for (int x = 0; x < W; x++) {
+				fb[x * 240 + (239 - y)] = rgb[row[x]];
+			}
+		}
+		GSPGPU_FlushDataCache(fb, W * H * 2);
+	}
+
+	Shape_frame* sb_icon(int shape) {
+		ShapeID sid(shape, 0, SF_SHORTCUTBAR_VGA);
+		return sid.get_shape();
+	}
+
+	void paint_centered(Shape_frame* f, int cx, int cy) {
+		if (f) {
+			f->paint_rle(buf, cx - f->get_width() / 2 + f->get_xleft(), cy - f->get_height() / 2 + f->get_yabove());
+		}
+	}
+
+	std::shared_ptr<Font> font(int n) {
+		return Shape_manager::get_instance()->get_font(n);
+	}
+
+	void text(int fontnum, const char* s, int x, int y) {
+		if (auto f = font(fontnum)) {
+			f->paint_text(buf, s, x, y);
+		}
+	}
+
+	void text_centered(int fontnum, const char* s, int cx, int y, int maxw = W) {
+		auto f = font(fontnum);
+		if (!f) {
+			return;
+		}
+		std::string str(s);
+		while (!str.empty() && f->get_text_width(str.c_str()) > maxw) {
+			str.pop_back();
+		}
+		f->paint_text(buf, str.c_str(), cx - f->get_text_width(str.c_str()) / 2, y);
+	}
+
+	void panel(int x, int y, int w, int h, bool hi) {
+		buf->fill8(C_EDGE, w, h, x, y);
+		buf->fill8(hi ? C_PANEL_HI : C_PANEL, w - 2, h - 2, x + 1, y + 1);
+	}
+
+	Shape_frame* face_of(Actor* a) {
+		const Paperdoll_npc* npcinfo = a->get_info().get_npc_paperdoll();
+		if (!npcinfo) {
+			npcinfo = ShapeID::get_info(a->get_sexed_coloured_shape()).get_npc_paperdoll();
+		}
+		if (!npcinfo) {
+			npcinfo = ShapeID::get_info(a->get_shape_real()).get_npc_paperdoll_safe(a->get_type_flag(Actor::tf_sex));
+		}
+		if (!npcinfo) {
+			return nullptr;
+		}
+		ShapeID sid(npcinfo->get_head_shape(), npcinfo->get_head_frame(), SF_PAPERDOL_VGA);
+		return sid.get_shape();
+	}
+
+	void bar(int x, int y, int w, int val, int maxv, unsigned char col) {
+		buf->fill8(C_DIM, w, 3, x, y);
+		int f = maxv > 0 ? val * w / maxv : 0;
+		if (f > w) {
+			f = w;
+		}
+		if (f > 0) {
+			buf->fill8(col, f, 3, x, y);
+		}
+	}
+
+	void draw_party(Game_window* gwin) {
+		buf->fill8(C_BG, W, PARTY_H, 0, PARTY_Y);
+		std::vector<Actor*> members;
+		if (Actor* av = gwin->get_main_actor()) {
+			members.push_back(av);
+		}
+		Party_manager* pm = gwin->get_party_man();
+		for (int i = 0; pm && i < pm->get_count() && members.size() < 8; i++) {
+			if (Actor* a = gwin->get_npc(pm->get_member(i))) {
+				members.push_back(a);
+			}
+		}
+		const int slot = W / 8;
+		for (size_t i = 0; i < members.size(); i++) {
+			Actor*    a  = members[i];
+			const int sx = static_cast<int>(i) * slot;
+			const int id = 100 + static_cast<int>(i);
+			const bool hurt = a->get_flag(Obj_flags::poisoned) || a->was_hit();
+			panel(sx + 1, PARTY_Y + 1, slot - 2, PARTY_H - 2, pressed_id == id);
+			if (hurt) {
+				buf->fill8(a->get_flag(Obj_flags::poisoned) ? C_GREEN : C_RED, slot - 4, 2, sx + 2, PARTY_Y + 2);
+			}
+			buf->set_clip(sx + 2, PARTY_Y + 2, slot - 4, 32);
+			if (Shape_frame* f = face_of(a)) {
+				paint_centered(f, sx + slot / 2, PARTY_Y + 19);
+			} else {
+				const std::string n = a->get_name();
+				text_centered(0, n.substr(0, 1).c_str(), sx + slot / 2, PARTY_Y + 10);
+			}
+			buf->clear_clip();
+			bar(sx + 4, PARTY_Y + 35, slot - 8, a->get_effective_prop(Actor::health), a->get_effective_prop(Actor::strength), C_RED);
+			if (a->get_effective_prop(Actor::magic) > 0) {
+				bar(sx + 4, PARTY_Y + 40, slot - 8, a->get_effective_prop(Actor::mana), a->get_effective_prop(Actor::magic), C_BLUE);
+			}
+			// Tap = inventory of party member i (Exult binds keys 1-8 to this)
+			hits.push_back({sx, PARTY_Y, slot, PARTY_H, static_cast<SDL_Keycode>(SDLK_1 + i), SDL_KMOD_NONE, id});
+		}
+	}
+
+	// ---- Minimap ------------------------------------------------------------
+	// Terrain colours (one per tile, sampled from the middle of each 8x8 tile
+	// of the chunk's rendered ground), drawn at 2x2 pixels per tile and
+	// centred on the Avatar, with party / NPC dots and the top screen's view
+	// outlined. Tap a spot to walk there (Exult's pathfinding).
+	constexpr int MM_SCALE = 2;
+	constexpr int MM_W     = SIDE_X;    // leave the column for the side buttons
+	constexpr int MM_H     = PAD_H - 2;
+	constexpr int MM_TW = MM_W / MM_SCALE, MM_TH = MM_H / MM_SCALE;
+
+	std::unordered_map<int, std::vector<unsigned char>> terrain_thumbs;
+	std::vector<unsigned char>                          mm_tiles(MM_TW * MM_TH);
+	int                                                 mm_ox = 0, mm_oy = 0, mm_map = -1;
+	uint64_t                                            mm_built   = 0;
+	int                                                 pending_tx = -1, pending_ty = -1;
+	std::string                                         mm_msg;
+	uint64_t                                            mm_msg_until = 0;
+
+	const std::vector<unsigned char>& terrain_thumb(int tnum) {
+		auto it = terrain_thumbs.find(tnum);
+		if (it != terrain_thumbs.end()) {
+			return it->second;
+		}
+		if (terrain_thumbs.size() > 1500) {
+			terrain_thumbs.clear();    // keep memory bounded on long journeys
+		}
+		std::vector<unsigned char> t(c_tiles_per_chunk * c_tiles_per_chunk, C_DIM);
+		if (Chunk_terrain* ter = Game_map::get_terrain(tnum)) {
+			if (Image_buffer8* flats = ter->get_rendered_flats()) {
+				const unsigned char* bits = flats->get_bits();
+				const int            lw   = flats->get_line_width();
+				for (int ty = 0; ty < c_tiles_per_chunk; ty++) {
+					for (int tx = 0; tx < c_tiles_per_chunk; tx++) {
+						t[ty * c_tiles_per_chunk + tx]
+								= bits[(ty * c_tilesize + c_tilesize / 2) * lw + tx * c_tilesize + c_tilesize / 2];
+					}
+				}
+			}
+		}
+		return terrain_thumbs.emplace(tnum, std::move(t)).first->second;
+	}
+
+	void build_minimap(Game_window* gwin, int ox, int oy) {
+		Game_map* gmap = gwin->get_map();
+		for (int y = 0; y < MM_TH; y++) {
+			const int ty = (oy + y + c_num_tiles) % c_num_tiles;
+			for (int x = 0; x < MM_TW; x++) {
+				const int   tx   = (ox + x + c_num_tiles) % c_num_tiles;
+				const int   tnum = gmap->get_terrain_num(tx / c_tiles_per_chunk, ty / c_tiles_per_chunk);
+				const auto& th   = terrain_thumb(tnum);
+				mm_tiles[y * MM_TW + x] = th[(ty % c_tiles_per_chunk) * c_tiles_per_chunk + tx % c_tiles_per_chunk];
+			}
+		}
+	}
+
+	void mm_dot(int x, int y, unsigned char col, int size) {
+		buf->fill8(C_BG, size + 2, size + 2, x - 1, y - 1);
+		buf->fill8(col, size, size, x, y);
+	}
+
+	void draw_minimap(Game_window* gwin) {
+		Actor*           av     = gwin->get_main_actor();
+		const Tile_coord at     = av->get_tile();
+		const int        ox     = at.tx - MM_TW / 2;
+		const int        oy     = at.ty - MM_TH / 2;
+		const uint64_t   now    = SDL_GetTicks();
+		const int        mapnum = gwin->get_map()->get_num();
+		if (mapnum != mm_map || ox != mm_ox || oy != mm_oy || now - mm_built > 3000) {
+			build_minimap(gwin, ox, oy);
+			mm_ox    = ox;
+			mm_oy    = oy;
+			mm_map   = mapnum;
+			mm_built = now;
+		}
+		const int      x0   = 1, y0 = PAD_Y + 1;
+		unsigned char* bits = buf->get_bits();
+		const int      lw   = buf->get_line_width();
+		for (int y = 0; y < MM_TH; y++) {
+			for (int x = 0; x < MM_TW; x++) {
+				const unsigned char c = mm_tiles[y * MM_TW + x];
+				unsigned char*      p = bits + (y0 + y * MM_SCALE) * lw + x0 + x * MM_SCALE;
+				p[0] = p[1] = p[lw] = p[lw + 1] = c;
+			}
+		}
+		auto to_px = [&](int tx, int ty, int& px, int& py) {
+			px = x0 + Tile_coord::delta(ox, tx) * MM_SCALE;
+			py = y0 + Tile_coord::delta(oy, ty) * MM_SCALE;
+			return px >= x0 && py >= y0 && px < x0 + MM_W - 2 && py < y0 + MM_H - 2;
+		};
+		// What the top screen shows.
+		{
+			int px, py;
+			to_px(gwin->get_scrolltx(), gwin->get_scrollty(), px, py);
+			const int vw = gwin->get_width() / c_tilesize * MM_SCALE;
+			const int vh = gwin->get_height() / c_tilesize * MM_SCALE;
+			buf->set_clip(x0, y0, MM_W, MM_H);
+			buf->fill8(C_TEXT, vw, 1, px, py);
+			buf->fill8(C_TEXT, vw, 1, px, py + vh - 1);
+			buf->fill8(C_TEXT, 1, vh, px, py);
+			buf->fill8(C_TEXT, 1, vh, px + vw - 1, py);
+			buf->clear_clip();
+		}
+		// People nearby: yellow (red if hostile), party green, Avatar white.
+		std::vector<Actor*> npcs;
+		gwin->get_nearby_npcs(npcs);
+		static unsigned char C_YELLOW = 0;
+		if (!C_YELLOW) {
+			C_YELLOW = nearest(240, 220, 60);
+		}
+		for (Actor* a : npcs) {
+			if (!a || a == av || a->is_dead() || a->get_flag(Obj_flags::invisible)) {
+				continue;
+			}
+			int              px, py;
+			const Tile_coord t = a->get_tile();
+			if (to_px(t.tx, t.ty, px, py)) {
+				const int  al    = a->get_effective_alignment();
+				const bool party = a->get_flag(Obj_flags::in_party);
+				const bool foe   = al == Actor::evil || al == Actor::chaotic;
+				mm_dot(px, py, party ? C_GREEN : foe ? C_RED : C_YELLOW, 2);
+			}
+		}
+		int ax, ay;
+		if (to_px(at.tx, at.ty, ax, ay)) {
+			mm_dot(ax - 1, ay - 1, C_TEXT, 4);
+		}
+		if (!mm_msg.empty() && now < mm_msg_until) {
+			buf->fill8(C_BG, MM_W - 40, 14, x0 + 20, PAD_Y + PAD_H - 19);
+			text_centered(0, mm_msg.c_str(), x0 + MM_W / 2, PAD_Y + PAD_H - 17, MM_W - 48);
+		} else {
+			buf->fill8(C_BG, 92, 11, 3, PAD_Y + 3);
+			text(5, "tap to walk there", 6, PAD_Y + 4);
+		}
+	}
+
+	void travel_to(Game_window* gwin, int tx, int ty) {
+		Main_actor* av = gwin->get_main_actor();
+		mm_msg_until   = SDL_GetTicks() + 2500;
+		if (av->get_flag(Obj_flags::asleep) || av->get_flag(Obj_flags::paralyzed)
+			|| av->get_schedule_type() == Schedule::sleep || gwin->get_moving_barge() || av->in_usecode_control()) {
+			mm_msg = "Can't walk right now";
+			return;
+		}
+		const Tile_coord dest(tx, ty, av->get_lift());
+		const int        speed = Mouse::mouse() ? Mouse::mouse()->avatar_speed : gwin->get_std_delay();
+		if (av->walk_path_to_tile(dest, speed)) {
+			av->get_followers();
+			gwin->get_effects()->add_effect(std::make_unique<Sprites_effect>(18, dest, 0, 0, 0, 0));
+			mm_msg = "On the way";
+		} else {
+			mm_msg = "No way to get there";
+		}
+	}
+	void draw_pad(Game_window* gwin, Conversation* conv) {
+		buf->fill8(C_DIM, W, PAD_H, 0, PAD_Y);
+		buf->fill8(C_EDGE, W, 1, 0, PAD_Y);
+
+		choices_shown = conv && conv->are_choices_active() && conv->get_num_answers() > 0;
+		if (choices_shown) {
+			const int n       = conv->get_num_answers();
+			const int perpage = n > 10 ? 9 : 10;
+			if (answer_page * perpage >= n) {
+				answer_page = 0;
+			}
+			const int first = answer_page * perpage;
+			const int bw = W / 2 - 6, bh = 24;
+			for (int k = 0; k < perpage && first + k < n; k++) {
+				const int i  = first + k;
+				const int bx = 4 + (k % 2) * (W / 2), by = PAD_Y + 6 + (k / 2) * (bh + 2);
+				const int id = 200 + k;
+				panel(bx, by, bw, bh, pressed_id == id);
+				text_centered(0, conv->get_answer(i), bx + bw / 2, by + 6, bw - 8);
+				static const char keys[] = "123456789abcdefghijklmnopqrstuvwxyz";
+				const char        c      = i < 35 ? keys[i] : '1';
+				hits.push_back({bx, by, bw, bh, static_cast<SDL_Keycode>(c), SDL_KMOD_NONE, id});
+			}
+			if (n > perpage) {
+				const int bx = 4 + (perpage % 2) * (W / 2), by = PAD_Y + 6 + (perpage / 2) * (bh + 2);
+				panel(bx, by, bw, bh, pressed_id == 299);
+				text_centered(0, "More...", bx + bw / 2, by + 6, bw - 8);
+				hits.push_back({bx, by, bw, bh, SDLK_UNKNOWN, SDL_KMOD_NONE, 299});
+			}
+			return;
+		}
+		answer_page = 0;
+
+		if (show_help) {
+			static const char* lines[] = {"Touch middle area: point + click (top screen)",
+										  "C-Stick: cursor   Circle Pad: walk",
+										  "A click/drag   B walk to cursor   X use/talk",
+										  "Y inventory   D-Pad up Map, down Stats",
+										  "D-Pad left/right: jump to nearby people/items",
+										  "R combat  ZL keys  ZR target  START menu",
+										  "SELECT quicksave   L+SELECT quick-restore",
+										  "Hold L: D-Pad Watch Pause Lockpick Food",
+										  "map button: minimap - tap it to walk there",
+										  "Portrait: inventory    3D slider: depth"};
+			int y = PAD_Y + 6;
+			for (const char* l : lines) {
+				text(5, l, 6, y);
+				y += 13;
+			}
+			hits.push_back({0, PAD_Y, W, PAD_H, SDLK_UNKNOWN, SDL_KMOD_NONE, 298});    // tap closes
+			return;
+		}
+
+		// Side buttons: "?" help and "map" minimap toggle.
+		buf->fill8(C_BG, W - SIDE_X, PAD_H - 1, SIDE_X, PAD_Y + 1);
+		panel(W - 28, PAD_Y + 8, 26, 22, pressed_id == 297);
+		text_centered(0, "?", W - 15, PAD_Y + 13);
+		hits.push_back({W - 30, PAD_Y + 4, 30, 30, SDLK_UNKNOWN, SDL_KMOD_NONE, 297});
+		panel(W - 28, PAD_Y + 38, 26, 22, minimap_on || pressed_id == 296);
+		text_centered(5, "map", W - 15, PAD_Y + 45);
+		hits.push_back({W - 30, PAD_Y + 34, 30, 30, SDLK_UNKNOWN, SDL_KMOD_NONE, 296});
+
+		if (minimap_on) {
+			draw_minimap(gwin);
+			hits.push_back({0, PAD_Y, MM_W + 2, PAD_H, SDLK_UNKNOWN, SDL_KMOD_NONE, 295});    // tap = walk there
+			return;
+		}
+
+		// Touchpad: time of day + what's under the cursor
+		char       tbuf[64];
+		Game_clock* clk = gwin->get_clock();
+		if (clk) {
+			int        h    = clk->get_hour();
+			const char* ap  = h < 12 ? "AM" : "PM";
+			int        h12 = h % 12 == 0 ? 12 : h % 12;
+			std::snprintf(tbuf, sizeof tbuf, "Day %d   %d:%02d %s", clk->get_day() + 1, h12, clk->get_minute(), ap);
+			text(5, tbuf, 6, PAD_Y + 5);
+		}
+		if (gwin->in_combat()) {
+			text(5, Combat::is_paused() ? "COMBAT (paused)" : "COMBAT", 180, PAD_Y + 5);
+		}
+		Gump_manager* gm = gwin->get_gump_man();
+		Mouse*        m  = Mouse::mouse();
+		if (m && gm && !gm->find_gump(m->get_mousex(), m->get_mousey())) {
+			if (Game_object* obj = gwin->find_object(m->get_mousex(), m->get_mousey())) {
+				const std::string n = obj->get_name();
+				if (!n.empty()) {
+					text_centered(0, n.c_str(), SIDE_X / 2, PAD_Y + PAD_H / 2 - 6, SIDE_X - 12);
+				}
+			}
+		}
+		text_centered(5, "touch here to point and click", SIDE_X / 2, PAD_Y + PAD_H - 14);
+	}
+
+	void draw_bar(Game_window* gwin) {
+		buf->fill8(C_BG, W, BAR_H, 0, BAR_Y);
+		struct B {
+			int         icon;
+			const char* label;
+			SDL_Keycode key;
+			SDL_Keymod  mod;
+		};
+		static const B row[10] = {
+				{SB_MAPS, "Map", SDLK_M, SDL_KMOD_NONE},          {SB_SPELLBOOK, "Spells", SDLK_B, SDL_KMOD_NONE},
+				{SB_NOTEBOOK, "Notes", SDLK_N, SDL_KMOD_NONE},    {SB_KEYRING, "Keys", SDLK_K, SDL_KMOD_NONE},
+				{SB_BACKPACK, "Pack", SDLK_I, SDL_KMOD_NONE},     {SB_COMBAT, "Combat", SDLK_C, SDL_KMOD_NONE},
+				{SB_TARGET, "Target", SDLK_T, SDL_KMOD_NONE},     {SB_FOOD, "Food", SDLK_F, SDL_KMOD_NONE},
+				{SB_DISK, "Save", SDLK_S, SDL_KMOD_NONE},         {-1, "Menu", SDLK_ESCAPE, SDL_KMOD_NONE},
+		};
+		const int bw = W / 5, bh = BAR_H / 2;
+		for (int i = 0; i < 10; i++) {
+			const int  bx = (i % 5) * bw, by = BAR_Y + (i / 5) * bh;
+			const int  id = 300 + i;
+			const bool on = (i == 5 && gwin->in_combat());
+			panel(bx + 1, by + 1, bw - 2, bh - 2, on || pressed_id == id);
+			if (row[i].icon >= 0) {
+				Shape_frame* ic = sb_icon(row[i].icon);
+				const int    iw = ic ? std::min(ic->get_width(), 30) : 0;
+				buf->set_clip(bx + 2, by + 2, iw + 2, bh - 4);
+				paint_centered(ic, bx + 3 + iw / 2, by + bh / 2);
+				buf->clear_clip();
+				text(5, row[i].label, bx + iw + 6, by + bh / 2 - 4);
+			} else {
+				text_centered(5, row[i].label, bx + bw / 2, by + bh / 2 - 4);
+			}
+			hits.push_back({bx, by, bw, bh, row[i].key, row[i].mod, id});
+		}
+	}
+
+	void push_key(SDL_Keycode key, SDL_Keymod mod) {
+		SDL_Event e{};
+		e.type      = SDL_EVENT_KEY_DOWN;
+		e.key.key   = key;
+		e.key.mod   = mod;
+		e.key.down  = true;
+		e.key.scancode = SDL_SCANCODE_UNKNOWN;
+		SDL_PushEvent(&e);
+		e.type     = SDL_EVENT_KEY_UP;
+		e.key.down = false;
+		SDL_PushEvent(&e);
+	}
+
+	int hit_at(int x, int y) {
+		for (size_t i = 0; i < hits.size(); i++) {
+			const Hit& h = hits[i];
+			if (x >= h.x && x < h.x + h.w && y >= h.y && y < h.y + h.h) {
+				return static_cast<int>(i);
+			}
+		}
+		return -1;
+	}
+	// ---- D-pad target cycling -------------------------------------------
+	int          pending_cycle = 0;
+	Game_object* last_target   = nullptr;
+
+	void do_cycle(Game_window* gwin, int dir) {
+		Actor* av = gwin->get_main_actor();
+		if (!av) {
+			return;
+		}
+		Game_object_vector found;
+		av->find_nearby(found, c_any_shapenum, 14, 0);
+		struct T {
+			Game_object* obj;
+			int          cx, cy, dist, rank;
+		};
+		std::vector<T> list;
+		const int      w = gwin->get_width(), h = gwin->get_height();
+		for (Game_object* obj : found) {
+			if (obj == av) {
+				continue;
+			}
+			const auto cls = obj->get_info().get_shape_class();
+			if (cls == Shape_info::unusable || cls == Shape_info::building) {
+				continue;
+			}
+			if (obj->get_name().empty()) {
+				continue;
+			}
+			Shape_frame* f = obj->get_shape();
+			if (!f) {
+				continue;
+			}
+			int x = 0, y = 0;
+			gwin->get_shape_location(obj, x, y);
+			const int cx = x - f->get_xleft() + f->get_width() / 2;
+			const int cy = y - f->get_yabove() + f->get_height() / 2;
+			if (cx < 0 || cy < 0 || cx >= w || cy >= h) {
+				continue;    // off screen
+			}
+			const int dx = cx - w / 2, dy = cy - h / 2;
+			// People first, then containers, then other things.
+			const bool person = obj->get_info().is_npc() && !obj->get_flag(Obj_flags::dead);
+			const int  rank   = person ? 0 : cls == Shape_info::container ? 1 : 2;
+			list.push_back({obj, cx, cy, dx * dx + dy * dy, rank});
+		}
+		if (list.empty()) {
+			return;
+		}
+		std::sort(list.begin(), list.end(), [](const T& a, const T& b) {
+			return a.rank != b.rank ? a.rank < b.rank : a.dist < b.dist;
+		});
+		int idx = -1;
+		for (size_t i = 0; i < list.size(); i++) {
+			if (list[i].obj == last_target) {
+				idx = static_cast<int>(i);
+			}
+		}
+		const int n = static_cast<int>(list.size());
+		idx         = idx < 0 ? (dir > 0 ? 0 : n - 1) : ((idx + dir) % n + n) % n;
+		last_target = list[idx].obj;
+		N3DS_SetCursor(static_cast<float>(list[idx].cx), static_cast<float>(list[idx].cy));
+		last_draw = 0;    // show its name on the bottom screen right away
+	}
+}    // namespace
+
+extern "C" void N3DS_CycleTarget(int dir) {    // from SDL's input layer
+	pending_cycle += dir;
+}
+
+void n3ds_bottom_init() {
+	// Bottom screen as a single-buffered RGB565 framebuffer (the libctru
+	// console uses the same setup, so the pre-game legend keeps working).
+	gfxSetScreenFormat(GFX_BOTTOM, GSP_RGB565_OES);
+	gfxSetDoubleBuffering(GFX_BOTTOM, false);
+}
+
+// Called after every frame is presented on the top screen.
+void n3ds_bottom_tick() {
+	n3ds::stereo_tick();
+	Game_window* gwin = Game_window::get_instance();
+	if (!gwin || !gwin->get_main_actor() || !gwin->get_pal() || !Shape_manager::get_instance()) {
+		return;    // still in Exult's menus: the console legend stays up
+	}
+	const uint64_t now = SDL_GetTicks();
+	if (pending_cycle != 0) {
+		const int dir = pending_cycle > 0 ? 1 : -1;
+		pending_cycle = 0;
+		do_cycle(gwin, dir);
+	}
+	if (pending_tx >= 0) {
+		travel_to(gwin, pending_tx, pending_ty);
+		pending_tx = pending_ty = -1;
+		last_draw               = 0;
+	}
+	if (mode == GAME && now - last_draw < 100) {
+		return;
+	}
+	last_draw = now;
+	if (!buf) {
+		buf = new Image_buffer8(W, H);
+	}
+	Palette* pal = gwin->get_pal();
+	if (!day_pal_cached || mode == LEGEND) {
+		// Use the daylight palette for the UI so it stays readable at night.
+		load_palette(gwin);
+		day_pal_cached = pal->get_palette_index() == 0 && pal->get_brightness() == 100;
+	}
+	mode = GAME;
+
+	Conversation* conv = nullptr;
+	if (Usecode_machine* uc = gwin->get_usecode()) {
+		conv = uc->get_conversation();
+	}
+
+	// Autosave (quicksave into the game in progress) every 15 minutes while
+	// idle, so a flat battery or a crash costs at most a few minutes.
+	{
+		static uint64_t next_autosave = 0;
+		if (next_autosave == 0) {
+			next_autosave = now + N3DS_AUTOSAVE_MS;
+		}
+		Gump_manager* gm   = gwin->get_gump_man();
+		const bool    idle = !(conv && conv->are_choices_active()) && !(gm && gm->showing_gumps()) && !gwin->in_combat();
+		if (now >= next_autosave && idle) {
+			push_key(SDLK_S, SDL_KMOD_LCTRL);    // Exult's Ctrl-S = quicksave
+			next_autosave = now + N3DS_AUTOSAVE_MS;
+			std::printf("[exult-3ds] autosave\n");
+		}
+	}
+
+	hits.clear();
+	// Exult's font code always paints into the shared render target, so point
+	// it at our buffer while drawing and restore it afterwards.
+	Image_buffer8* prev = Shape_frame::get_render_target();
+	Shape_frame::set_to_render(buf);
+	draw_party(gwin);
+	draw_pad(gwin, conv);
+	draw_bar(gwin);
+	Shape_frame::set_to_render(prev);
+	blit();
+}
+
+// Touch hook called from SDL's N3DS input layer (main thread).
+// phase: 0 = down, 1 = move, 2 = up.
+// Returns 1 if the bottom-screen UI took the touch (no mouse emulation),
+// or 0 with nx/ny = normalised touchpad position for the top-screen cursor.
+extern "C" int N3DS_BottomTouch(int phase, int x, int y, float* nx, float* ny) {
+	if (mode != GAME) {
+		*nx = x / 320.0f;
+		*ny = y / 240.0f;
+		return 0;
+	}
+	if (phase == 0) {
+		touch_hit = hit_at(x, y);
+		touch_ui  = touch_hit >= 0 || y < PAD_Y || y >= BAR_Y || (x >= SIDE_X && !show_help && !choices_shown);
+		pressed_id = touch_hit >= 0 ? hits[touch_hit].id : -1;
+		last_draw  = 0;    // redraw promptly to show the press
+	}
+	if (touch_ui) {
+		if (phase == 2) {
+			const int now_hit = hit_at(x, y);
+			if (touch_hit >= 0 && now_hit == touch_hit) {
+				const Hit h = hits[touch_hit];
+				if (h.id == 297) {
+					show_help = true;
+				} else if (h.id == 296) {
+					minimap_on = !minimap_on;
+					mm_built   = 0;
+				} else if (h.id == 295) {
+					pending_tx = (mm_ox + (x - 1) / MM_SCALE + c_num_tiles) % c_num_tiles;
+					pending_ty = (mm_oy + (y - PAD_Y - 1) / MM_SCALE + c_num_tiles) % c_num_tiles;
+				} else if (h.id == 298) {
+					show_help = false;
+				} else if (h.id == 299) {
+					answer_page++;
+				} else if (h.key != SDLK_UNKNOWN) {
+					push_key(h.key, h.mod);
+				}
+			}
+			pressed_id = -1;
+			touch_hit  = -1;
+			touch_ui   = false;
+			last_draw  = 0;
+		}
+		return 1;
+	}
+	float fx = x / static_cast<float>(SIDE_X), fy = (y - PAD_Y) / static_cast<float>(PAD_H);
+	*nx      = fx < 0 ? 0 : fx > 1 ? 1 : fx;
+	*ny      = fy < 0 ? 0 : fy > 1 ? 1 : fy;
+	return 0;
+}

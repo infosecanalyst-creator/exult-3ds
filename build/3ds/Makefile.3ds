@@ -1,0 +1,32 @@
+# Exult for New Nintendo 3DS — devkitARM build (run inside devkitpro/devkitarm)
+include $(DEVKITARM)/base_tools
+include 3ds/objs.mk
+SRC      := .
+DEPS     ?= /deps
+P3DS     := $(DEVKITPRO)/portlibs/3ds
+CTRU     := $(DEVKITPRO)/libctru
+ARCH     := -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
+SERVER_OBJS := server/objserial.o server/servemsg.o server/server.o
+THREEDS_OBJS := 3ds/n3ds_platform.o 3ds/n3ds_bottom.o 3ds/n3ds_stereo.o
+OBJS     += $(THREEDS_OBJS)
+
+CPPFLAGS := -D__3DS__ -DN3DS_PORT -DVERSION=\"$(VERSION)\" -DEXULT_DATADIR=\"sdmc:/3ds/exult/data\" \
+	-DHAVE_SYS_TYPES_H=1 -DHAVE_SYS_TIME_H=1 -DHAVE_SYS_SOCKET_H=0 -DHAVE_NETDB_H=0 \
+	-DHAVE_SNPRINTF -DUSE_FMOPL_MIDI -DHAVE_ZIP_SUPPORT -DUSE_XBR_SCALER \
+	-I. -Iaudio -Iaudio/midi_drivers -Iconf -Idata -Ifiles -Ifiles/zip -Igamemgr -Igumps \
+	-Iheaders -Iimagewin -Iobjs -Ipathfinder -Iserver -Ishapes -Itools -Iusecode -Ishapes/shapeinf -I3ds -Iusecode -Igumps \
+	-I$(DEPS)/include -I$(P3DS)/include -I$(CTRU)/include
+CXXFLAGS := -std=gnu++17 -O2 -g0 $(ARCH) -ffunction-sections -fdata-sections -w -MMD
+CFLAGS   := -O2 $(ARCH) -ffunction-sections -w -MMD
+LDFLAGS  := -specs=3dsx.specs $(ARCH) -Wl,--gc-sections
+LIBS     := -L$(DEPS)/lib -L$(P3DS)/lib -L$(CTRU)/lib \
+	-lSDL3 -lvorbisfile -lvorbis -logg -lz -lcitro3d -lctru -lm
+
+all: exult.3dsx
+exult.elf: $(OBJS)
+	$(CXX) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
+exult.smdh: 3ds/icon.png
+	smdhtool --create "Exult (Ultima VII)" "The Black Gate & Serpent Isle" "Exult Team / 3DS port" 3ds/icon.png $@
+exult.3dsx: exult.elf exult.smdh
+	3dsxtool $< $@ --smdh=exult.smdh
+-include $(OBJS:.o=.d)

@@ -1,0 +1,10 @@
+# Built binaries and generated Exult data (attach to GitHub Releases instead)
+SD/
+build/work/
+build/out/
+*.3dsx
+*.elf
+# Per-user installer state and pulled logs
+settings.json
+from-3ds/
+_to_delete/
