@@ -24,6 +24,7 @@
 namespace n3ds {
 	bool depth_active = false;
 }
+bool n3ds_game_on_top();    // n3ds_bottom.cc: the game was swapped back to the top screen
 
 namespace {
 	constexpr uint8_t DEPTH_UI = 255;
@@ -193,7 +194,7 @@ namespace n3ds {
 	void stereo_tick() {
 		Game_window* gw     = Game_window::get_instance();
 		const bool   ingame = gw && gw->get_main_actor() != nullptr;
-		const bool   want   = ingame && osGet3DSliderState() > 0.0f;
+		const bool   want   = ingame && n3ds_game_on_top() && osGet3DSliderState() > 0.0f;
 		if (want && !depth_active) {
 			depth_active = ensure_buffer();
 			need_repaint = depth_active;
@@ -216,8 +217,8 @@ namespace n3ds {
  */
 extern "C" int N3DS_StereoFrame(
 		const void* src, int sw, int sh, int pitch, int bpp, void* rightfb, int fbw, int fbh, float slider) {
-	if (!n3ds::depth_active || bpp != 4 || sw != dw || sh != dh || depth.empty() || fbw < sh
-		|| fbh < sw) {
+	// The game area (dw x dh) sits centred in the window surface (sw x sh).
+	if (!n3ds::depth_active || bpp != 4 || sw < dw || sh != dh || depth.empty() || fbw < sh || fbh < sw) {
 		return 0;
 	}
 	const u64 t0 = svcGetSystemTick();
@@ -231,9 +232,13 @@ extern "C" int N3DS_StereoFrame(
 	// Windows, conversations, text and the cursor are composited layers that
 	// are not in the height map: put them on the screen plane.
 	static std::vector<uint8_t> frame_depth;
-	frame_depth = depth;
+	const int                   xoff = (sw - dw) / 2;
+	frame_depth.assign(static_cast<size_t>(sw) * sh, DEPTH_UI);    // borders: screen plane
+	for (int y = 0; y < dh; y++) {
+		std::memcpy(&frame_depth[static_cast<size_t>(y) * sw + xoff], &depth[static_cast<size_t>(y) * dw], dw);
+	}
 	if (Game_window* gw = Game_window::get_instance(); gw && gw->get_win()) {
-		gw->get_win()->n3ds_mark_layers(frame_depth.data(), dw, dh, DEPTH_UI);
+		gw->get_win()->n3ds_mark_layers(frame_depth.data(), sw, sh, DEPTH_UI);
 	}
 
 	static std::vector<uint32_t> row;
@@ -243,7 +248,7 @@ extern "C" int N3DS_StereoFrame(
 	auto* out = static_cast<uint32_t*>(rightfb);
 	for (int y = 0; y < sh; y++) {
 		const auto*    s = reinterpret_cast<const uint32_t*>(static_cast<const uint8_t*>(src) + static_cast<size_t>(y) * pitch);
-		const uint8_t* d = &frame_depth[static_cast<size_t>(y) * dw];
+		const uint8_t* d = &frame_depth[static_cast<size_t>(y) * sw];
 		std::fill(zb.begin(), zb.end(), static_cast<int16_t>(-1));
 		// Forward-project each pixel by its parallax; nearer pixels win.
 		for (int x = 0; x < sw; x++) {

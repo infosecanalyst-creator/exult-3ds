@@ -11,6 +11,38 @@ index aadd4f4..79bb517 100644
  
  		if (time_till_next <= LLMD_MINIMUM_YIELD_THRESHOLD) {
  			bool wait = false;
+diff --git a/effects.cc b/effects.cc
+index 5142fb6..42090ff 100644
+--- a/effects.cc
++++ b/effects.cc
+@@ -85,10 +85,17 @@ Effects_manager::~Effects_manager() {
+  *  @param item     Item text ID's, or null.
+  */
+ 
++#ifdef N3DS_PORT
++void n3ds_note_text(const char* msg, Game_object* item);    // 3ds/n3ds_bottom.cc: message log
++#endif
++
+ void Effects_manager::add_text(const char* msg, Game_object* item) {
+ 	if (!msg) {    // Happens with edited games.
+ 		return;
+ 	}
++#ifdef N3DS_PORT
++	n3ds_note_text(msg, item);
++#endif
+ 	// Don't duplicate for item.
+ 	if (std::find_if(
+ 				texts.cbegin(), texts.cend(),
+@@ -112,6 +119,9 @@ void Effects_manager::add_text(const char* msg, Game_object* item) {
+  */
+ 
+ void Effects_manager::add_text(const char* msg, int x, int y) {
++#ifdef N3DS_PORT
++	n3ds_note_text(msg, nullptr);
++#endif
+ 	texts.emplace_front(
+ 			std::make_unique<Text_effect>(msg, gwin->get_scrolltx() + x / c_tilesize, gwin->get_scrollty() + y / c_tilesize, gwin));
+ }
 diff --git a/exult.cc b/exult.cc
 index 4ba1584..a51b1a9 100644
 --- a/exult.cc
@@ -82,8 +114,100 @@ index 4ba1584..a51b1a9 100644
  
  	// KBD repeat should be nice.
  	SDL_HideCursor();
+diff --git a/exultmenu.cc b/exultmenu.cc
+index 7427b67..f9750fe 100644
+--- a/exultmenu.cc
++++ b/exultmenu.cc
+@@ -154,6 +154,16 @@ static inline bool handle_menu_click(int id, int& first, int last_page, int page
+ 	}
+ }
+ 
++// 3DS: the menu is shown on the 320-pixel touchscreen, the middle of the
++// 400-pixel window, so lay it out in the game area only.
++#ifdef N3DS_PORT
++#	define MENU_FULL_W  (gwin->get_width())
++#	define MENU_START_X 0
++#else
++#	define MENU_FULL_W  (gwin->get_win()->get_full_width())
++#	define MENU_START_X (gwin->get_win()->get_start_x())
++#endif
++
+ int maximum_size(std::shared_ptr<Font> font, tcb::span<const char* const> options, int centerx) {
+ 	ignore_unused_variable_warning(centerx);
+ 	int max_width = 0;
+@@ -207,7 +217,12 @@ void ExultMenu::calc_win() {
+ 	centerx  = gwin->get_width() / 2;
+ 	centery  = gwin->get_height() / 2;
+ 	auto fnt = font ? font : fontManager.get_font("CREDITS_FONT");
++#ifdef N3DS_PORT
++	// One column of games (two don't fit across the 320-pixel touchscreen).
++	pagesize = std::max(1, (gwin->get_win()->get_full_height() - 5 * fnt->get_text_height() - 15) / 42);
++#else
+ 	pagesize = std::max(1, 2 * ((gwin->get_win()->get_full_height() - 5 * fnt->get_text_height() - 15) / 45));
++#endif
+ }
+ 
+ void ExultMenu::setup() {
+@@ -263,12 +278,16 @@ std::unique_ptr<MenuList> ExultMenu::create_main_menu(int first) {
+ 		std::cerr << "Exult.flx file is corrupted. Please reinstall Exult." << std::endl;
+ 		throw quit_exception();
+ 	}
+-	int                      xpos        = (gwin->get_win()->get_full_width() / 2 + fr->get_width()) / 2;
++	int                      xpos        = (MENU_FULL_W / 2 + fr->get_width()) / 2;
+ 	std::vector<ModManager>& game_list   = gamemanager->get_game_list();
+ 	const int                num_choices = game_list.size();
+ 	const int                last        = num_choices > first + pagesize ? first + pagesize : num_choices;
+ 	for (int i = first; i < last; i++) {
+-		const int         menux     = xpos + (i % 2) * gwin->get_win()->get_full_width() / 2 + gwin->get_win()->get_start_x();
++#ifdef N3DS_PORT
++		const int menux = centerx + fr->get_width() / 2;
++#else
++		const int menux = xpos + (i % 2) * MENU_FULL_W / 2 + MENU_START_X;
++#endif
+ 		const ModManager& exultgame = game_list[i];
+ 		const bool have_sfx = Audio::have_config_sfx(exultgame.get_cfgname()) || Audio::have_roland_sfx(exultgame.get_game_type())
+ 							  || Audio::have_sblaster_sfx(exultgame.get_game_type()) || Audio::have_midi_sfx();
+@@ -282,9 +301,13 @@ std::unique_ptr<MenuList> ExultMenu::create_main_menu(int first) {
+ 			mod_entry->set_id(i + MAX_GAMES);
+ 			menu->add_entry(mod_entry);
+ 		}
++#ifdef N3DS_PORT
++		ypos += 42;
++#else
+ 		if (i % 2) {
+ 			ypos += 45;
+ 		}
++#endif
+ 	}
+ 
+ 	create_scroller_menu(
+@@ -305,7 +328,7 @@ std::unique_ptr<MenuList> ExultMenu::create_main_menu(int first) {
+ 		total_text_width += font->get_text_width(choice);
+ 	}
+ 	const int count      = static_cast<int>(menuchoices.size());
+-	const int gap        = std::max(16, (gwin->get_win()->get_full_width() - total_text_width) / (count + 1));
++	const int gap        = std::max(16, (MENU_FULL_W - total_text_width) / (count + 1));
+ 	const int total_span = total_text_width + (count - 1) * gap;
+ 	xpos                 = centerx - total_span / 2;
+ 	ypos                 = gwin->get_win()->get_end_y() - 3 * font->get_text_height();
+@@ -325,13 +348,13 @@ std::unique_ptr<MenuList> ExultMenu::create_mods_menu(ModManager* selgame, int f
+ 	auto menu = std::make_unique<MenuList>();
+ 
+ 	int ypos = 15 + gwin->get_win()->get_start_y();
+-	int xpos = gwin->get_win()->get_full_width() / 4;
++	int xpos = MENU_FULL_W / 4;
+ 
+ 	std::vector<ModInfo>& mod_list    = selgame->get_mod_list();
+ 	const int             num_choices = mod_list.size();
+ 	const int             last        = num_choices > first + pagesize ? first + pagesize : num_choices;
+ 	for (int i = first; i < last; i++) {
+-		const int      menux    = xpos + (i % 2) * gwin->get_win()->get_full_width() / 2 + gwin->get_win()->get_start_x();
++		const int      menux    = xpos + (i % 2) * MENU_FULL_W / 2 + MENU_START_X;
+ 		const ModInfo& exultmod = mod_list[i];
+ 		auto*          entry    = new MenuGameEntry(fonton, font, exultmod.get_menu_string().c_str(), nullptr, menux, ypos);
+ 		entry->set_id(i);
 diff --git a/files/utils.cc b/files/utils.cc
-index 6f68316..f241bff 100644
+index 6f68316..4d623e9 100644
 --- a/files/utils.cc
 +++ b/files/utils.cc
 @@ -38,6 +38,7 @@
@@ -110,7 +234,7 @@ index 6f68316..f241bff 100644
  using std::ios;
  using std::string;
  
-@@ -85,6 +95,192 @@ static void switch_slashes(string& name);
+@@ -85,6 +95,239 @@ static void switch_slashes(string& name);
  static bool base_to_uppercase(string& str, int count);
  
  // Global factories for instantiating file streams
@@ -197,14 +321,27 @@ index 6f68316..f241bff 100644
 +		}
 +	};
 +
++	// Write timing, for the log (saving and creating gamedat are slow).
++	extern "C" unsigned long long n3ds_ticks();
++	unsigned long long w_files = 0, w_open_ticks = 0, w_close_ticks = 0, w_bytes = 0;
++
 +	struct N3dsOfstream : StreamBufHolder, std::ofstream {
 +		N3dsOfstream(const char* s, std::ios_base::openmode mode) {
 +			rdbuf()->pubsetbuf(buf.get(), N3DS_STREAM_BUF);
++			const unsigned long long t0 = n3ds_ticks();
 +			open(s, mode);
++			w_open_ticks += n3ds_ticks() - t0;
++			w_files++;
 +		}
 +
 +		~N3dsOfstream() override {
++			const std::streamoff n = is_open() ? static_cast<std::streamoff>(tellp()) : 0;
++			const unsigned long long t0 = n3ds_ticks();
 +			close();    // flush while the buffer is still alive
++			w_close_ticks += n3ds_ticks() - t0;
++			if (n > 0) {
++				w_bytes += static_cast<unsigned long long>(n);
++			}
 +		}
 +	};
 +
@@ -241,14 +378,26 @@ index 6f68316..f241bff 100644
 +		}
 +	}
 +
++	// Time spent waiting on the SD card, for the log (diagnosing slow starts).
++	extern "C" unsigned long long n3ds_ticks();    // n3ds_platform.cc
++	constexpr double              N3DS_TICKS_PER_MS = 268111.856;
++	unsigned long long io_ticks = 0, io_opens = 0, io_stats = 0, io_streams = 0;
++	struct IoTimer {
++		unsigned long long t0 = n3ds_ticks();
++		~IoTimer() { io_ticks += n3ds_ticks() - t0; }
++	};
++
 +	std::unique_ptr<std::istream> n3ds_open_in(const char* s, std::ios_base::openmode mode) {
++		IoTimer     timer;
 +		struct stat st {};
++		io_stats++;
 +		if (::stat(s, &st) != 0 || !S_ISREG(st.st_mode)) {
 +			auto fail = std::make_unique<std::ifstream>();
 +			fail->setstate(std::ios::failbit);
 +			return fail;
 +		}
 +		if (st.st_size > N3DS_CACHE_FILE) {
++			io_streams++;
 +			return std::make_unique<N3dsIfstream>(s, mode);    // big file: read only what's needed
 +		}
 +		const std::string key(s);
@@ -258,6 +407,7 @@ index 6f68316..f241bff 100644
 +			return std::make_unique<MemIstream>(it->second.data);
 +		}
 +		cache_drop(key);
++		io_opens++;
 +		const int fd = ::open(s, O_RDONLY);
 +		if (fd < 0) {
 +			auto fail = std::make_unique<std::ifstream>();
@@ -286,6 +436,27 @@ index 6f68316..f241bff 100644
 +	}
 +}    // namespace
 +
++extern "C" double n3ds_io_ms() {
++	return io_ticks / N3DS_TICKS_PER_MS;
++}
++
++extern "C" void n3ds_io_report(char* out, unsigned n) {
++	std::snprintf(out, n, "io %.1f s: %llu stats, %llu whole reads (%.1f MB), %llu streamed files", n3ds_io_ms() / 1000.0,
++				  io_stats, io_opens, bytes_read_whole / 1048576.0, io_streams);
++}
++
++// Cumulative file writes; returns false if nothing changed since last call.
++extern "C" bool n3ds_write_report(char* out, unsigned n) {
++	static unsigned long long last = ~0ull;
++	if (w_files == last) {
++		return false;
++	}
++	last = w_files;
++	std::snprintf(out, n, "writes: %llu files, %.1f MB, open %.1f s, write+close %.1f s", w_files, w_bytes / 1048576.0,
++				  w_open_ticks / 268111856.0, w_close_ticks / 268111856.0);
++	return true;
++}
++
 +extern "C" unsigned long n3ds_cache_report(unsigned long* cached_kb) {
 +	*cached_kb = static_cast<unsigned long>(cache_bytes / 1024);
 +	return static_cast<unsigned long>(bytes_read_whole / 1024);
@@ -303,7 +474,7 @@ index 6f68316..f241bff 100644
  static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openmode mode) {
  	return std::make_unique<std::ifstream>(s, mode);
  };
-@@ -92,6 +288,7 @@ static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openm
+@@ -92,6 +335,7 @@ static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openm
  static U7OstreamFactory ostream_factory = [](const char* s, std::ios_base::openmode mode) {
  	return std::make_unique<std::ofstream>(s, mode);
  };
@@ -311,7 +482,7 @@ index 6f68316..f241bff 100644
  
  // Ugly hack for supporting different paths
  
-@@ -257,6 +454,12 @@ static bool base_to_uppercase(string& str, int count) {
+@@ -257,6 +501,12 @@ static bool base_to_uppercase(string& str, int count) {
  	if (count <= 0) {
  		return true;
  	}
@@ -509,6 +680,77 @@ index f067603..cf8a079 100644
  	cheat.set_enabled(cheats != 0);
  	cheat.SetFoodUse(Cheat::FoodUse(feeding), false);
  	gumpman->set_gumps_dont_pause_game(!gumps_pause);
+diff --git a/gumps/Sign_gump.cc b/gumps/Sign_gump.cc
+index 592c4b0..cd25f62 100644
+--- a/gumps/Sign_gump.cc
++++ b/gumps/Sign_gump.cc
+@@ -112,6 +112,10 @@ void Sign_gump::add_text(int line, const std::string& txt) {
+  *  Paint sign.
+  */
+ 
++#ifdef N3DS_PORT
++void n3ds_reading_sign(const void* who, int gump_shape, int font, const std::string* lines, int n, bool serpentine);
++#endif
++
+ void Sign_gump::paint() {
+ 	Shape_frame* shape = get_shape();
+ 	if (!shape) {
+@@ -162,6 +166,9 @@ void Sign_gump::paint() {
+ 	}
+ 	x = oldx;
+ 	y = oldy;
++#ifdef N3DS_PORT
++	n3ds_reading_sign(this, get_shapenum(), font, lines, num_lines, serpentine);
++#endif
+ 
+ 	end_layer_paint(w, h, prev);
+ 	gwin->set_painted();
+diff --git a/gumps/Text_gump.cc b/gumps/Text_gump.cc
+index 658e4c2..442d796 100644
+--- a/gumps/Text_gump.cc
++++ b/gumps/Text_gump.cc
+@@ -30,6 +30,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+ 
+ using std::strchr;
+ 
++#ifdef N3DS_PORT
++// 3ds/n3ds_bottom.cc: books, scrolls and signs are read on the top screen.
++void n3ds_reading_page(const void* who, const char* text, int len, bool more);
++void n3ds_reading_end(const void* who);
++bool n3ds_reading_on_top();
++#endif
++
+ bool Text_gump::begin_layer_paint(int drawx, int drawy, int& ox, int& oy, int& w, int& h, Image_buffer8*& prev_target) {
+ 	Game_window* gwin = Game_window::get_instance();
+ 	if (!gwin) {
+@@ -80,11 +87,18 @@ void Text_gump::end_layer_paint(int w, int h, Image_buffer8* prev_target) {
+ 	const float   dx   = (static_cast<float>(iwin->get_display_width()) - dw) / 2.0f;
+ 	const float   dy   = (static_cast<float>(iwin->get_display_height()) - dh) / 2.0f;
+ 	gwin->layer_set_dest(render_layer, static_cast<int>(dx), static_cast<int>(dy), static_cast<int>(dw), static_cast<int>(dh));
++#ifdef N3DS_PORT
++	gwin->layer_set_visible(render_layer, !n3ds_reading_on_top());    // shown on the top screen instead
++#else
+ 	gwin->layer_set_visible(render_layer, true);
++#endif
+ 	gwin->layer_set_dirty(render_layer);
+ }
+ 
+ Text_gump::~Text_gump() {
++#ifdef N3DS_PORT
++	n3ds_reading_end(this);
++#endif
+ 	delete[] text;
+ 	free_render_layer();
+ }
+@@ -292,5 +306,8 @@ int Text_gump::show_next_page() {
+ 	}
+ 
+ 	paint();    // Paint.  This updates curend.
++#ifdef N3DS_PORT
++	n3ds_reading_page(this, text + curtop, curend - curtop, curend < textlen);
++#endif
+ 	return 1;
+ }
 diff --git a/imagewin/ibuf8.cc b/imagewin/ibuf8.cc
 index 115c2ae..a7caae2 100644
 --- a/imagewin/ibuf8.cc
@@ -626,6 +868,26 @@ index 2452312..cf80455 100644
  	void          destroy_layer(int handle);
  	Image_buffer* get_layer_ibuf(int handle);
  	// Mark a layer's buffer as changed so it is re-uploaded before the next
+diff --git a/scene_layer.h b/scene_layer.h
+index ec09ddf..b75069e 100644
+--- a/scene_layer.h
++++ b/scene_layer.h
+@@ -48,7 +48,14 @@ class Scene_layer {
+ 		// of the configured game fill mode, so screens use the entire screen
+ 		// instead of a potentiall small aspect-correct/letterboxed rectangle.
+ 		gwin->set_ui_layer_config(
+-				Image_window::UiLayerFullScreenScene, scene_w, scene_h, iwin->get_scaler(), Image_window::Fill,
++				Image_window::UiLayerFullScreenScene, scene_w, scene_h, iwin->get_scaler(),
++#ifdef N3DS_PORT
++				// 3DS: unscaled in the middle, which is exactly the 320x240
++				// touchscreen (the window is 400 wide).
++				Image_window::Centre,
++#else
++				Image_window::Fill,
++#endif
+ 				iwin->get_fill_scaler());
+ 		handle = gwin->create_layer("scene", scene_w, scene_h, transparent_index, 0, scene_layer_z);
+ 		if (handle >= 0) {
 diff --git a/shapeid.cc b/shapeid.cc
 index 43cb583..836d56e 100644
 --- a/shapeid.cc
@@ -720,6 +982,91 @@ index 398c3c1..6d4fa8e 100644
  	unsigned char* get_data() {
  		return data.get();
  	}
+diff --git a/usecode/conversation.cc b/usecode/conversation.cc
+index 7354919..b073540 100644
+--- a/usecode/conversation.cc
++++ b/usecode/conversation.cc
+@@ -22,6 +22,8 @@
+ 
+ #include "conversation.h"
+ 
++#include <cstring>
++
+ #include "Face_stats.h"
+ #include "Gump_manager.h"
+ #include "ShortcutBar_gump.h"
+@@ -76,6 +78,17 @@ namespace {
+ // TODO: show_face & show_avatar_choices seem to share code?
+ // TODO: show_avatar_choices shouldn't first convert to char**, probably
+ 
++#ifdef N3DS_PORT
++// 3ds/n3ds_bottom.cc: the NPC's portrait and words go to the top screen and
++// the answers become big buttons on the touchscreen, so Exult's own
++// conversation overlay is hidden there.
++void n3ds_conv_text(int face_shape, int face_frame, int face_file, const char* msg, int len, bool large_face);
++bool n3ds_conv_on_top();
++#	define N3DS_CONV_VIS(v) ((v) && !n3ds_conv_on_top())
++#else
++#	define N3DS_CONV_VIS(v) (v)
++#endif
++
+ bool Conversation::noface = false;
+ 
+ /*
+@@ -311,7 +324,7 @@ void Conversation::render_conv_layer() {
+ 			bbuf->clear_clip();
+ 			gwin->pop_render_target(prev_bg);
+ 			gwin->layer_set_dirty(bgl);
+-			gwin->layer_set_visible(bgl, (num_faces > 0 || choices_active) && gwin->get_text_bg() >= 0);
++			gwin->layer_set_visible(bgl, N3DS_CONV_VIS((num_faces > 0 || choices_active) && gwin->get_text_bg() >= 0));
+ 		}
+ 	}
+ 	Image_buffer8* prev = gwin->push_render_target(lbuf);
+@@ -324,7 +337,7 @@ void Conversation::render_conv_layer() {
+ 	lbuf->clear_clip();
+ 	gwin->pop_render_target(prev);
+ 	gwin->layer_set_dirty(cl);
+-	gwin->layer_set_visible(cl, num_faces > 0 || choices_active);
++	gwin->layer_set_visible(cl, N3DS_CONV_VIS(num_faces > 0 || choices_active));
+ }
+ 
+ /*
+@@ -620,7 +633,7 @@ void Conversation::show_npc_message(const char* msg) {
+ 			bbuf->clear_clip();
+ 			gwin->pop_render_target(prev_bg);
+ 			gwin->layer_set_dirty(bgl);
+-			gwin->layer_set_visible(bgl, text_bg >= 0);
++			gwin->layer_set_visible(bgl, N3DS_CONV_VIS(text_bg >= 0));
+ 		}
+ 		Image_buffer8* prev = lbuf ? gwin->push_render_target(lbuf) : nullptr;
+ 		if (lbuf) {
+@@ -629,11 +642,16 @@ void Conversation::show_npc_message(const char* msg) {
+ 			paint_faces(true);
+ 		}
+ 		height = sman->paint_text_box(font, msg, box.x, box.y, box.w, box.h, -1, true, info->large_face, -1);
++#ifdef N3DS_PORT
++		n3ds_conv_text(
++				info->shape.get_shapenum(), info->shape.get_framenum(), static_cast<int>(info->shape.get_shapefile()), msg,
++				height >= 0 ? static_cast<int>(strlen(msg)) : -height, info->large_face);
++#endif
+ 		if (lbuf) {
+ 			lbuf->clear_clip();
+ 			gwin->pop_render_target(prev);
+ 			gwin->layer_set_dirty(cl);
+-			gwin->layer_set_visible(cl, true);
++			gwin->layer_set_visible(cl, N3DS_CONV_VIS(true));
+ 		}
+ 		if (height >= 0) {
+ 			break;    // All of the text fit.
+@@ -809,7 +827,7 @@ void Conversation::show_avatar_choices(int num_choices, char** choices) {
+ 			}
+ 			gwin->pop_render_target(prev_bg);
+ 			gwin->layer_set_dirty(bgl);
+-			gwin->layer_set_visible(bgl, true);
++			gwin->layer_set_visible(bgl, N3DS_CONV_VIS(true));
+ 		}
+ 	}
+ 	// Second pass: draw all text on top of backgrounds.
 diff --git a/usecode/conversation.h b/usecode/conversation.h
 index 92b4c23..f2e9651 100644
 --- a/usecode/conversation.h

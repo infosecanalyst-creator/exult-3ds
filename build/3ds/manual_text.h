@@ -1,0 +1,139 @@
+// Generated from 3ds/manual.txt (the in-game manual). Regenerate with build/3ds/make_manual_h.py.
+#pragma once
+static const char* const N3DS_MANUAL_BUILTIN = R"MANUAL(# Welcome
+Ultima VII is a huge, open role-playing game. You are the Avatar, back in Britannia two hundred years after your last visit, and a murder in the town of Trinsic is where it begins.
+
+This is Exult, the engine that runs Ultima VII on modern machines, made for the New 3DS. You play on the touchscreen with the stylus, the way the original is played with a mouse. The top screen tells you what you need to know without touching it.
+
+It plays The Black Gate (with Forge of Virtue) and Serpent Isle (with The Silver Seed), using your own copy of the game.
+
+## Reading this manual
+- Tap a section on the touchscreen to open it.
+- D-Pad up and down: scroll.
+- D-Pad left and right: previous and next section.
+- B or Start: close. The manual opens again where you left it.
+
+# Getting started
+## Installing over Wi-Fi
+1. On the 3DS, open the Homebrew Launcher and start ftpd.
+2. On the PC, double-click Install-Exult.cmd in the Exult folder. It finds the 3DS, then sends Exult, its data, your game files and any mods.
+3. Close ftpd and start Exult from the Homebrew Launcher.
+
+The same steps install every update; only changed files are sent. You never need to take the SD card out.
+
+## Picking a game
+Exult's own menus appear on the touchscreen: tap a game, then Journey Onward to continue your game or Start New Game.
+
+## The first start after an update
+Starting a game unpacks its working files. That takes a little while; later starts are quicker.
+
+# The two screens
+## Bottom screen: the game
+The touchscreen shows the game, pixel for pixel. Everything you do happens here, with the stylus or a fingertip.
+
+## Top screen: your dashboard
+The top screen never needs touching.
+| Party | A portrait for each member, a red health bar and a blue mana bar.
+| Tags | PSN poisoned, FOOD hungry, STRV starving, ZZ asleep, PAR paralyzed, CHM charmed.
+| Minimap | The land around you. You are white, the party green, people yellow, foes red. The box is what the touchscreen shows.
+| Info | The day and time, COMBAT while fighting, what the stylus or cursor is on, problems like "Iolo is hungry", and recent messages.
+
+The top screen also takes over to show the world map, the party's stats, conversations, books, scrolls and signs.
+
+# Playing with the stylus
+| Tap | Click: look at something, pick it up, press it.
+| Double-tap | Use something, or talk to someone.
+| Hold still | Walk to where the stylus is.
+| Drag | Move an item: into a backpack, onto a person, onto the ground.
+
+Small things are easier to hit zoomed in: press ZL (see Zoom, 3D and swapping).
+
+# Buttons
+| Circle Pad | Walk
+| C-Stick | Move the cursor
+| A | Click (hold to drag)
+| B | Walk toward the cursor
+| X | Use / talk to what the cursor is on
+| Y | Inventory
+| D-Pad up | World map on the top screen
+| D-Pad down | Party stats on the top screen
+| D-Pad left/right | Jump the cursor to the next person or object
+| R | Combat on / off
+| ZL | Zoom the touchscreen: 1.5x, 2x, normal
+| ZR | Target mode
+| START | Game menu: save, load, options
+| SELECT | Quicksave
+| L+START | Swap the screens
+| L+Y | This manual
+| L+SELECT | Quick-restore
+| L+X | Next music track
+| L+D-Pad | Up watch, down pause combat, left lockpick, right food
+| 3D slider | Depth, when the game is on the top screen
+
+# The menu button
+The three bars in the top-right corner of the touchscreen open the menu.
+| Portraits | Tap one to open that member's inventory.
+| Spells | The spellbook.
+| Notes | Your notebook.
+| Map | The world map on the top screen.
+| Stats | The party's stats on the top screen.
+| Keys | Try your keys on a lock (Keyring mod).
+| Food | Feed the party.
+| Target | Pick something to use an item on.
+| Combat | Combat on or off.
+| Save | Save or load.
+| Manual | This manual.
+| Swap screens | Put the game on the top screen (for 3D) or back.
+| Game menu | Exult's menu: save, load, options, quit.
+
+Tap outside it, or press B, to close it.
+
+# Talking and reading
+## Conversations
+Double-tap someone to talk. Their portrait and words appear on the top screen. Your answers become big buttons along the bottom of the touchscreen: tap one to reply. More... shows the rest when there are many. Between lines, tap the touchscreen to continue.
+
+## Books, scrolls and signs
+Their text appears on the top screen in the readable font. Tap the touchscreen for the next page, and again to close.
+
+Signs, plaques and gravestones keep their rune lettering, with the same words in plain letters underneath. Serpent Isle's serpent script stays as it is.
+
+# Zoom, 3D and swapping
+## Zoom
+ZL zooms the touchscreen to 1.5x, then 2x, then back. The view follows the Avatar and taps still land where you touch. The top screen shows ZOOM while it is on.
+
+## Swapping the screens
+L+START (or Swap screens in the menu) puts the game back on the top screen and the dashboard on the touchscreen. Touches then point and click on the game above, at the same spot. Press L+START again to swap back.
+
+## 3D
+3D works when the game is on the top screen: swap the screens, then push the 3D slider up. Roofs, trees and people rise out of the screen; windows and text stay flat.
+
+# Saving
+- SELECT quicksaves. L+SELECT restores the quicksave.
+- Save in the menu (or START, then Save/Load) keeps named saves.
+- The game autosaves every 15 minutes when you are not talking, fighting or in a window.
+- Journey Onward continues the game in progress.
+
+Saves live in sdmc:/3ds/exult/saves and use the same format as Exult on Windows, macOS and Linux. Exult-3DS.cmd option 6 syncs them both ways with your PC.
+
+# Text and fonts
+The game uses a pixel font drawn for the 3DS screen, light grey with a black outline, and a dark box behind conversation text. Both can be changed in the game menu: Options, then Display (Fonts and Text background).
+
+# Your game files and mods
+Exult needs your own copy of Ultima VII. The installer copies these to the SD card:
+| sdmc:/3ds/exult/blackgate/static | The Black Gate (plus Forge of Virtue)
+| sdmc:/3ds/exult/serpentisle/static | Serpent Isle (plus The Silver Seed)
+| .../mods | Mods such as Keyring or SI Fixes
+
+# Troubleshooting
+## There is no sound
+Homebrew needs a dump of the 3DS sound firmware. Run DSP1 from the Homebrew Launcher once, then restart Exult.
+
+## Starting or saving is slow
+Starting a game and saving write many small files to the SD card, which takes a while on the 3DS. Let it finish.
+
+## Something went wrong
+Exult keeps a log in sdmc:/3ds/exult/exult.log. Every line is timestamped. Send it along with a note of what you were doing.
+
+## Changing this manual
+A file named manual.txt in sdmc:/3ds/exult/ replaces the built-in text. Sections start with "# ", headings with "## ", list items with "- ", numbered steps with "1. ", and table rows with "| ".
+)MANUAL";

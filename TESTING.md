@@ -2,6 +2,22 @@
 
 Notes from development and testing. The build is tested in the Azahar emulator (New 3DS mode), with real-hardware results added as they come in.
 
+## Touch-first layout (Oct 26-27)
+- **Why:** on hardware, copying the top screen into a live view on the bottom lagged badly. The game now runs on the touchscreen at 320x240, pixel for pixel, and the top screen is a dashboard. "Runs a lot faster" on hardware.
+- **Display:** SDL copies the middle 320 columns of the 400x240 window to the bottom screen, or a zoomed rectangle (`N3DS_BottomView`). Overlays (menu button, menu, answer buttons) are drawn after the copy (`N3DS_BottomOverlay`). Taps map 1:1, including with zoom.
+- **Swap (L+START):** game back on top (32-bit, double-buffered, 3D), dashboard on the bottom (RGB565).
+- **Exult's menus and title scenes:** laid out in the 320-pixel middle (single-column game picker; scenes centred, not stretched).
+- **Top-screen views:** conversations (portrait at 2x and words; answers as buttons below), books, scrolls, signs (runes plus plain letters), world map (BG), party stats.
+- **Flicker fix:** the overlay is drawn once per game frame. Pending changes are presented directly only when the game is paused.
+- **In-game manual:** replaces the 6-page guide.
+- **Tested in the emulator:** picker, title, dashboard fonts, zoom with taps, menu, portrait to inventory, swap both ways, map, stats, a conversation with Iolo (answers tapped), manual sections. Books and signs aren't tested yet.
+
+## Slow starts on hardware (open)
+- Some launches take minutes and others seconds, with the same build.
+- **Ruled out by measurement:** SD read speed (9 MB/s), SD opens and stats (none slow when it happened), memory and CPU speed at launch (all normal).
+- In slow runs everything after the audio and SDL setup is ~100x slower, including pure computation. Suspect: SDL's audio thread falls back to the game's core at a higher priority when the system core is refused, so FM synthesis starves the game. It now runs below the game in that case, and the log records each thread's core and priority.
+- The log has a heartbeat when the game goes quiet (last SD call, calls since).
+
 ## Readability: pixel font and text background (Oct 25)
 - Three options were compared on the same conversation:
   - A: DejaVu Sans Bold, the previous version.

@@ -4,14 +4,13 @@ A port of [Exult](https://exult.info), the engine for Ultima VII, to the **New N
 
 The original game was played with a mouse. This port is built for the stylus:
 
-- **The bottom screen shows a live picture of the game.** Tap where you see, hold the stylus to walk there, and drag items around.
-- **The bottom screen is also a companion panel:**
-  - party portraits with health, mana and status alerts;
-  - large dialogue buttons;
-  - an action bar;
-  - a minimap with tap-to-walk.
+- **You play on the touchscreen.** The game fills it pixel for pixel. Tap where you see, hold the stylus to walk there, and drag items around.
+- **The top screen is a dashboard:**
+  - your party, a minimap, the time and recent messages;
+  - conversations, books, signs, the world map and the party's stats, so nothing covers the game while you read.
 - **Readable text:** a pixel font drawn for the 3DS screen replaces the original blackletter and its yellow. It's light grey with a black outline, and conversations get a dark box behind them, like TV subtitles.
-- **Stereoscopic 3D:** the 3D slider gives the world real depth. Roofs, trees and walls rise out of the screen.
+- **Stereoscopic 3D:** swap the game onto the top screen and the 3D slider gives the world real depth. Roofs, trees and walls rise out of the screen.
+- **A full instruction manual in the game** (L+Y).
 - **Install and update over Wi-Fi** from a Windows PC. There's no need to take the SD card out, and saves can sync both ways with Exult on the PC.
 
 > Game data isn't included. You need your own copy of Ultima VII.
@@ -64,32 +63,31 @@ sdmc:/3ds/exult/serpentisle/static/    your Serpent Isle STATIC folder (+ mods/)
 
 ## Playing
 
-### Learning the controls in the game
-- **Tips:** the first time you need something, a short tip appears over the party strip. There are tips for touching the picture, portraits, conversations, combat, status tags, zoom, the minimap and 3D. Each one shows once. Tap a tip to close it.
-- **The ? button** opens an 8-page illustrated guide. Each page shows a miniature of the bottom screen with the part it explains highlighted. The last page can replay all the tips.
-- **Before a game is loaded,** the bottom screen explains how the touch panel works once you're in.
+The full instruction manual is in the game: press **L+Y**, or tap the menu button and then **Manual**. The text is on the top screen, with a button for each section on the touchscreen. Its source is [`build/3ds/manual.txt`](build/3ds/manual.txt), and a `manual.txt` in `sdmc:/3ds/exult/` replaces the built-in one.
 
-### Bottom screen
-
-- **Party strip (top):**
-  - A portrait of each party member, with health (red) and mana (blue) bars.
-  - Status tags on the portraits: PSN poisoned, FOOD hungry, STRV starving, ZZ asleep, PAR paralyzed, CHM charmed.
-  - The spare space beside the portraits spells out what needs attention, for example "Iolo is hungry", or shows "Party OK".
-  - **Tap a portrait** to open that member's inventory.
-  - **Drag an item onto a portrait** to give it to that member.
-- **Live view (middle):** a copy of the top screen.
-  - **Tap** clicks there.
-  - **Double-tap** uses something or talks to someone.
-  - **Drag** moves items.
-  - **Hold the stylus still** to walk to that spot.
-  - **Hold L** to zoom 2x around the cursor, for small things like items in a backpack.
-- **Info column (right):**
-  - The day and time, and COMBAT while you're fighting.
-  - What the cursor is on: a person's name with their health, or an item's name and how many there are.
-  - The **?** (guide) and **map** buttons.
-- **Dialogue:** the middle area turns into large answer buttons.
-- **Minimap (map):** terrain around the party, with people marked and the visible area outlined. Tap a spot to walk there.
-- **Action bar (bottom):** Map, Spells, Notes, Keys, Pack / Combat, Target, Food, Save, Menu.
+### Two screens
+- **The touchscreen is the game.** It shows 320×240, pixel for pixel, played with the stylus like a mouse:
+  - **tap** clicks;
+  - **double-tap** uses something or talks to someone;
+  - **hold the stylus still** to walk there;
+  - **drag** moves items.
+- **The top screen is a dashboard** you never need to touch:
+  - party portraits with health and mana bars and status tags (PSN poisoned, FOOD hungry, STRV starving, ZZ asleep, PAR paralyzed, CHM charmed);
+  - a minimap of the area, with the party, people and foes marked and the touchscreen's view outlined;
+  - the day and time, combat state, what the cursor is on, problems such as "Iolo is hungry", and recent messages.
+- **Anything you read appears on the top screen:**
+  - **Conversations:** the speaker's portrait and words are on top, and your answers become large buttons on the touchscreen.
+  - **Books and scrolls:** shown in the readable font.
+  - **Signs, plaques and gravestones:** kept in their rune lettering, with the plain words underneath. Serpent Isle's serpent script stays untranslated.
+  - **The world map:** D-Pad up.
+  - **The party's stats:** D-Pad down.
+- **The menu button** (three bars, top-right of the touchscreen) opens:
+  - party portraits (tap one for that inventory);
+  - Spells, Notes, Map, Stats, Keys, Food, Target, Combat, Save;
+  - the Manual, Swap screens and Game menu.
+- **ZL zooms** the touchscreen to 1.5× or 2× around the Avatar. Taps still land where you touch.
+- **L+START swaps the screens.** The game goes on top, where the 3D slider works, and the dashboard comes down. Touches then point and click 1:1 on the game above.
+- First-time tips appear on the top screen the first time each is relevant.
 
 ### Buttons
 
@@ -101,21 +99,23 @@ sdmc:/3ds/exult/serpentisle/static/    your Serpent Isle STATIC folder (+ mods/)
 | B | Hold to walk toward the cursor |
 | X | Double click: use / talk |
 | Y | Inventory |
+| D-Pad ↑ / ↓ | World map / party stats on the top screen |
 | D-Pad ← / → | Jump the cursor to the next nearby person or object |
-| D-Pad ↑ / ↓ | Map / Stats |
 | R | Toggle combat |
-| ZL / ZR | Try keys (Keyring mod) / Target |
+| ZL / ZR | Zoom the touchscreen / Target |
 | START | Game menu (save, load, options), or close windows |
 | SELECT | Quicksave |
+| L+START | Swap screens |
+| L+Y | Manual |
 | Hold L + D-Pad | ↑ Watch · ↓ Pause combat · ← Lockpick · → Food |
-| L + SELECT / L + Y / L + X | Quick-restore / Help / Next music track |
-| 3D slider | Stereoscopic depth (off at the bottom) |
+| L+SELECT / L+X | Quick-restore / Next music track |
+| 3D slider | Stereoscopic depth while the game is on the top screen (off at the bottom) |
 
 Typing (the Avatar's name, save names) uses the 3DS keyboard.
 
 ### Stereoscopic 3D
 
-Push the 3D slider up:
+Swap the game onto the top screen with L+START, then push the 3D slider up:
 - The ground sits behind the screen.
 - People, walls, trees, upper floors and roofs come forward.
 - Windows and text stay on the screen plane.
@@ -136,7 +136,7 @@ Option **6** in `Exult-3DS.cmd` syncs saves both ways with Exult on the PC:
 
 ### Defaults (`sdmc:/3ds/exult/exult.cfg`)
 
-- **Game view:** 400×240 at 1:1, which fills the top screen and shows more of the map than the original 320×200. If a scene misbehaves in a wide view (the Skara Brae sacrifice is known to), set `video/game` to 320×200.
+- **Game view:** 320×240 at 1:1, the touchscreen's size, which shows a little more of the map than the original 320×200. Exult draws it in the middle of the top screen's 400×240 window, so with the screens swapped the world fills the whole top screen.
 - **Music and sound:** OPL synth music, mono, 22 kHz. The digital OGG soundtrack is off to save CPU.
 - **CPU:** the New 3DS's 804 MHz mode and L2 cache are on.
 - **Intro:** the splash intro is skipped. View Introduction is still in the game menu.
@@ -159,7 +159,8 @@ What's in the source:
 | Path | What it is |
 |---|---|
 | `build/3ds/n3ds_platform.cc` | Heap setup, paths, default config, logging, crash diagnostics, `glob()` |
-| `build/3ds/n3ds_bottom.cc` | The bottom-screen companion: live view, party strip, dialogue, action bar, minimap, zoom, drag-to-portrait, target cycling, autosave |
+| `build/3ds/n3ds_bottom.cc` | The two-screen layout: the game on the touchscreen (with zoom and the menu button), the top-screen dashboard, conversations, reading, map, stats, the manual viewer, target cycling, autosave |
+| `build/3ds/manual.txt` | The in-game manual (built in via `manual_text.h`; regenerate with `make_manual_h.py`) |
 | `build/3ds/n3ds_stereo.cc` | Stereoscopic 3D: height map and right-eye re-projection |
 | `build/fonts/` | `u7pixel_glyphs.py` is the hand-drawn pixel font, and `make_fonts.py` builds `fonts_modern.vga` from it and Exult's serif font set. The prebuilt file is included. |
 | `build/patches/exult-3ds.patch` | Hooks into Exult: RAM-cached file loading, 3D height stamping, frame and touch hooks, small accessors, fixes |

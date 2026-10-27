@@ -1,3 +1,71 @@
+diff --git a/src/audio/n3ds/SDL_n3dsaudio.c b/src/audio/n3ds/SDL_n3dsaudio.c
+index ded98ea..1e9ffd2 100644
+--- a/src/audio/n3ds/SDL_n3dsaudio.c
++++ b/src/audio/n3ds/SDL_n3dsaudio.c
+@@ -19,6 +19,7 @@
+   3. This notice may not be removed or altered from any source distribution.
+ */
+ #include "SDL_internal.h"
++#include <stdio.h>
+ 
+ #ifdef SDL_AUDIO_DRIVER_N3DS
+ 
+@@ -254,10 +255,20 @@ static void N3DSAUDIO_ThreadInit(SDL_AudioDevice *device)
+ {
+     s32 current_priority = 0x30;
+     svcGetThreadPriority(&current_priority, CUR_THREAD_HANDLE);
+-    current_priority--;
+-    // 0x18 is reserved for video, 0x30 is the default for main thread
+-    current_priority = SDL_clamp(current_priority, 0x19, 0x2F);
++    if (svcGetProcessorID() == 1) {
++        // On the system core: run above the creator so audio never starves.
++        current_priority--;
++        // 0x18 is reserved for video, 0x30 is the default for main thread
++        current_priority = SDL_clamp(current_priority, 0x19, 0x2F);
++    } else {
++        /* Exult-3DS: on the application core (the system core was refused),
++           a higher priority lets audio mixing (FM synthesis) preempt the game
++           whenever it has work, which slowed everything ~100x. Run just below
++           the game instead; sound may stutter, but the game keeps its speed. */
++        current_priority = SDL_min(current_priority + 1, 0x3F);
++    }
+     svcSetThreadPriority(CUR_THREAD_HANDLE, current_priority);
++    printf("[exult-3ds] audio thread on core %d, priority 0x%lx\n", svcGetProcessorID(), (long)current_priority);
+ }
+ 
+ static bool N3DSAUDIO_Init(SDL_AudioDriverImpl *impl)
+diff --git a/src/thread/n3ds/SDL_systhread.c b/src/thread/n3ds/SDL_systhread.c
+index 5c1f0a1..6bff59c 100644
+--- a/src/thread/n3ds/SDL_systhread.c
++++ b/src/thread/n3ds/SDL_systhread.c
+@@ -19,6 +19,7 @@
+   3. This notice may not be removed or altered from any source distribution.
+ */
+ #include "SDL_internal.h"
++#include <stdio.h>
+ 
+ #ifdef SDL_THREAD_N3DS
+ 
+@@ -56,9 +57,17 @@ bool SDL_SYS_CreateThread(SDL_Thread *thread,
+     if (thread->name && (SDL_strncmp(thread->name, "SDLAudioP", 9) == 0)) {
+         bool new3ds = false;
+         APT_CheckNew3DS(&new3ds);
+-        if (new3ds && R_SUCCEEDED(APT_SetAppCpuTimeLimit(30))) {
+-            cpu = 1;
++        Result rc = -1;
++        if (new3ds) {
++            rc = APT_SetAppCpuTimeLimit(30);
++            if (R_SUCCEEDED(rc)) {
++                cpu = 1;
++            }
+         }
++        printf("[exult-3ds] thread %s: core %d (system core limit %s, rc %08lx)\n", thread->name, cpu,
++               R_SUCCEEDED(rc) ? "granted" : "refused", (unsigned long)rc);
++    } else if (thread->name) {
++        printf("[exult-3ds] thread %s: core %d, priority 0x%lx\n", thread->name, cpu, (long)priority);
+     }
+ 
+     thread->handle = threadCreate(ThreadEntry,
 diff --git a/src/video/n3ds/SDL_n3dsevents.c b/src/video/n3ds/SDL_n3dsevents.c
 index 3487c67..4c28367 100644
 --- a/src/video/n3ds/SDL_n3dsevents.c
@@ -18,7 +86,7 @@ index 3487c67..4c28367 100644
      if (!aptMainLoop()) {
          SDL_Event ev;
 diff --git a/src/video/n3ds/SDL_n3dsframebuffer.c b/src/video/n3ds/SDL_n3dsframebuffer.c
-index 41813a1..8b8ac54 100644
+index 41813a1..d7837bc 100644
 --- a/src/video/n3ds/SDL_n3dsframebuffer.c
 +++ b/src/video/n3ds/SDL_n3dsframebuffer.c
 @@ -39,7 +39,6 @@ static void CopyFramebuffertoN3DS_24(u8  *dest, const Dimensions dest_dim, const
@@ -29,11 +97,77 @@ index 41813a1..8b8ac54 100644
  
  
  bool SDL_N3DS_CreateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window, SDL_PixelFormat *format, void **pixels, int *pitch)
-@@ -65,6 +64,22 @@ bool SDL_N3DS_CreateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window
+@@ -65,6 +64,88 @@ bool SDL_N3DS_CreateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window
      return true;
  }
  
 +static bool stereo_on = false;
++static SDL_Window *last_window = NULL;
++
++/* Which physical screen shows the game window: GFX_TOP or GFX_BOTTOM, or -1
++   for the window's own display. Exult-3DS plays on the touchscreen and can
++   swap the game back to the top screen (for 3D). */
++__attribute__((weak)) int N3DS_GameScreen(void)
++{
++    return -1;
++}
++
++/* Called after the game has been copied to the bottom screen (32-bit, rotated
++   framebuffer: fbw = 240 rows), so the app can draw a small overlay. */
++__attribute__((weak)) void N3DS_BottomOverlay(void *fb, int fbw, int fbh)
++{
++    (void)fb; (void)fbw; (void)fbh;
++}
++
++/* Which part of the window surface fills the bottom screen (default: the
++   middle 320x240). Exult-3DS uses a smaller rect to zoom in. */
++__attribute__((weak)) void N3DS_BottomView(int *sx, int *sy, int *sw, int *sh)
++{
++    (void)sx; (void)sy; (void)sw; (void)sh;
++}
++
++/* Scale a rect of the window surface to the bottom screen (nearest pixel). */
++static void CopyRectToBottom32(u32 *dest, int fbw, int fbh, const SDL_Surface *surface, int sx, int sy, int sw, int sh)
++{
++    static int xmap[400];
++    const int cols = SDL_min(fbh, 400);
++    for (int x = 0; x < cols; ++x) {
++        xmap[x] = sx + x * sw / cols;
++    }
++    for (int y = 0; y < fbw; ++y) {
++        const int syy = sy + y * sh / fbw;
++        const u32 *s = (const u32 *)((const u8 *)surface->pixels + (size_t)syy * surface->pitch);
++        u32 *d = dest + (fbw - y - 1);
++        for (int x = 0; x < cols; ++x, d += fbw) {
++            *d = s[xmap[x]];
++        }
++    }
++}
++
++/* Copy the centre of a wider window surface to the 320-pixel bottom screen. */
++static void CopyCentreToBottom32(u32 *dest, int fbw, int fbh, const SDL_Surface *surface)
++{
++    const int cols = SDL_min(fbh, surface->w);
++    const int rows = SDL_min(fbw, surface->h);
++    const int x0 = (surface->w - cols) / 2;
++    for (int y = 0; y < rows; ++y) {
++        const u32 *s = (const u32 *)((const u8 *)surface->pixels + (size_t)y * surface->pitch) + x0;
++        u32 *d = dest + (fbw - y - 1);
++        for (int x = 0; x < cols; ++x, d += fbw) {
++            *d = s[x];
++        }
++    }
++}
++
++/* Show the last frame again (e.g. after the app changed its overlay while the
++   game is paused and not drawing). */
++void N3DS_Represent(void)
++{
++    SDL_VideoDevice *dev = SDL_GetVideoDevice();
++    if (last_window && dev) {
++        SDL_N3DS_UpdateWindowFramebuffer(dev, last_window, NULL, 0);
++    }
++}
 +
 +/* Default: nothing. Exult-3DS uses this to show a live picture of the top
 +   screen on the touchscreen (tap where you see). */
@@ -52,7 +186,40 @@ index 41813a1..8b8ac54 100644
  bool SDL_N3DS_UpdateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window, const SDL_Rect *rects, int numrects)
  {
      SDL_WindowData *drv_data = window->internal;
-@@ -91,7 +106,34 @@ bool SDL_N3DS_UpdateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window
+@@ -78,6 +159,32 @@ bool SDL_N3DS_UpdateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window
+         return SDL_SetError("%s: Unable to get the window surface.", SDL_FUNCTION);
+     }
+ 
++    last_window = window;
++    {
++        const int want = N3DS_GameScreen();
++        if (want == GFX_BOTTOM) {
++            if (stereo_on) {
++                gfxSet3D(false);
++                stereo_on = false;
++            }
++            framebuffer = gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, &width, &height);
++            bufsize = width * height * 4;
++            if (SDL_BYTESPERPIXEL(surface->format) == 4 && gfxGetScreenFormat(GFX_BOTTOM) == GSP_RGBA8_OES) {
++                int vx = -1, vy = -1, vw = -1, vh = -1;
++                N3DS_BottomView(&vx, &vy, &vw, &vh);
++                if (vw > 0 && vh > 0 && vx >= 0 && vy >= 0 && vx + vw <= surface->w && vy + vh <= surface->h) {
++                    CopyRectToBottom32(framebuffer, width, height, surface, vx, vy, vw, vh);
++                } else {
++                    CopyCentreToBottom32(framebuffer, width, height, surface);
++                }
++                N3DS_BottomOverlay(framebuffer, width, height);
++                GSPGPU_FlushDataCache(framebuffer, bufsize);
++                gfxScreenSwapBuffers(GFX_BOTTOM, false);
++            }
++            return true;
++        }
++    }
++
+     // Get the N3DS internal framebuffer and its size
+     framebuffer = gfxGetFramebuffer(drv_data->screen, GFX_LEFT, &width, &height);
+     bufsize = width * height * 4;
+@@ -91,7 +198,34 @@ bool SDL_N3DS_UpdateWindowFramebuffer(SDL_VideoDevice *_this, SDL_Window *window
      else
          CopyFramebuffertoN3DS_32(framebuffer, (Dimensions){ width, height },
                                   surface->pixels, (Dimensions){ surface->w, surface->h });
@@ -88,7 +255,7 @@ index 41813a1..8b8ac54 100644
  
      return true;
  }
-@@ -147,12 +189,6 @@ static int GetSourceOffset(int x, int y, int source_width)
+@@ -147,12 +281,6 @@ static int GetSourceOffset(int x, int y, int source_width)
      return x + y * source_width;
  }
  
@@ -145,10 +312,10 @@ index dd54a4c..33b4533 100644
  bool N3DS_StopTextInput(SDL_VideoDevice *_this, SDL_Window *window)
 diff --git a/src/video/n3ds/SDL_n3dsvinput.c b/src/video/n3ds/SDL_n3dsvinput.c
 new file mode 100644
-index 0000000..494bb4d
+index 0000000..4489af8
 --- /dev/null
 +++ b/src/video/n3ds/SDL_n3dsvinput.c
-@@ -0,0 +1,268 @@
+@@ -0,0 +1,288 @@
 +/*
 +  Exult-3DS virtual input layer for SDL3's N3DS backend.
 +
@@ -235,6 +402,20 @@ index 0000000..494bb4d
 +}
 +static Uint32 l_layer_used = 0;
 +
++/* Lets the app take buttons for its own UI (e.g. paging a guide). Returns the
++   buttons it consumed from kDown; those are not turned into game input. */
++__attribute__((weak)) u32 N3DS_KeyHook(u32 kDown, u32 kHeld)
++{
++    (void)kDown; (void)kHeld;
++    return 0;
++}
++
++/* Lets the app keep the cursor inside the visible part of the window. */
++__attribute__((weak)) void N3DS_ClampCursor(float *x, float *y)
++{
++    (void)x; (void)y;
++}
++
 +/* Default: nothing. Exult-3DS runs its bottom-screen UI from here too, so it
 +   keeps working while the game is paused and no frames are being drawn. */
 +__attribute__((weak)) void N3DS_InputTick(void)
@@ -263,6 +444,7 @@ index 0000000..494bb4d
 +    if (cursor_y < 0) cursor_y = 0;
 +    if (cursor_x > maxx) cursor_x = maxx;
 +    if (cursor_y > maxy) cursor_y = maxy;
++    N3DS_ClampCursor(&cursor_x, &cursor_y);
 +}
 +
 +static void Key(SDL_Scancode sc, bool down)
@@ -301,6 +483,11 @@ index 0000000..494bb4d
 +    kUp   = hidKeysUp();
 +    kHeld = hidKeysHeld();
 +    layer = (kHeld & KEY_L) != 0;
++    {
++        const u32 taken = N3DS_KeyHook(kDown, kHeld);
++        kDown &= ~taken;
++        kUp &= ~taken;
++    }
 +
 +    /* --- Touchscreen ---
 +       The app may claim parts of the bottom screen for its own UI through
