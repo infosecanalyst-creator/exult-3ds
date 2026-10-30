@@ -1,8 +1,20 @@
+# exult-3ds.patch -- Modified for exult-3ds, 2026-10.
+# Changes to Exult (https://github.com/exult/exult, commit in EXULT_COMMIT)
+# for the Nintendo 3DS port. Exult is copyright the Exult Team and is
+# licensed GPL-2.0-or-later; these changes are by the exult-3ds authors
+# under the same licence. Each modified file also gets a one-line notice.
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
 diff --git a/audio/midi_drivers/LowLevelMidiDriver.cpp b/audio/midi_drivers/LowLevelMidiDriver.cpp
-index aadd4f4..79bb517 100644
+index aadd4f4..ff2ebc3 100644
 --- a/audio/midi_drivers/LowLevelMidiDriver.cpp
 +++ b/audio/midi_drivers/LowLevelMidiDriver.cpp
-@@ -582,7 +582,7 @@ int LowLevelMidiDriver::threadMain() {
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+ Copyright (C) 2003-2005  The Pentagram Team
+ Copyright (C) 2010-2025  The Exult team
+@@ -582,7 +583,7 @@ int LowLevelMidiDriver::threadMain() {
  		}
  
  		// maximum wait of 1 second
@@ -12,10 +24,15 @@ index aadd4f4..79bb517 100644
  		if (time_till_next <= LLMD_MINIMUM_YIELD_THRESHOLD) {
  			bool wait = false;
 diff --git a/effects.cc b/effects.cc
-index 5142fb6..42090ff 100644
+index 5142fb6..e224b24 100644
 --- a/effects.cc
 +++ b/effects.cc
-@@ -85,10 +85,17 @@ Effects_manager::~Effects_manager() {
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  effects.cc - Special effects.
+  *
+@@ -85,10 +86,17 @@ Effects_manager::~Effects_manager() {
   *  @param item     Item text ID's, or null.
   */
  
@@ -33,7 +50,7 @@ index 5142fb6..42090ff 100644
  	// Don't duplicate for item.
  	if (std::find_if(
  				texts.cbegin(), texts.cend(),
-@@ -112,6 +119,9 @@ void Effects_manager::add_text(const char* msg, Game_object* item) {
+@@ -112,6 +120,9 @@ void Effects_manager::add_text(const char* msg, Game_object* item) {
   */
  
  void Effects_manager::add_text(const char* msg, int x, int y) {
@@ -44,10 +61,15 @@ index 5142fb6..42090ff 100644
  			std::make_unique<Text_effect>(msg, gwin->get_scrolltx() + x / c_tilesize, gwin->get_scrollty() + y / c_tilesize, gwin));
  }
 diff --git a/exult.cc b/exult.cc
-index 4ba1584..a51b1a9 100644
+index 4ba1584..5671038 100644
 --- a/exult.cc
 +++ b/exult.cc
-@@ -22,6 +22,11 @@
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /**
+  ** Exult.cc - Multiplatform Ultima 7 game engine
+  **
+@@ -22,6 +23,11 @@
   *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
   */
  
@@ -59,7 +81,7 @@ index 4ba1584..a51b1a9 100644
  #ifdef HAVE_CONFIG_H
  #	include <config.h>
  #endif
-@@ -250,6 +255,7 @@ int main(int argc, char* argv[]) {
+@@ -250,6 +256,7 @@ int main(int argc, char* argv[]) {
  	// cross-platform support.  Standalone utilities continue to default
  	// to the default std::fstream-based file I/O to avoid taking an SDL
  	// dependency.
@@ -67,7 +89,7 @@ index 4ba1584..a51b1a9 100644
  	U7set_istream_factory([](const char* s, std::ios_base::openmode mode) -> std::unique_ptr<std::istream> {
  		auto file = std::make_unique<std::ifstream>(s, mode);
  		if (file->good()) {
-@@ -264,6 +270,7 @@ int main(int argc, char* argv[]) {
+@@ -264,6 +271,7 @@ int main(int argc, char* argv[]) {
  		}
  		return std::make_unique<SdlRwopsOstream>(s, mode);
  	});
@@ -75,7 +97,7 @@ index 4ba1584..a51b1a9 100644
  #ifdef SDL_PLATFORM_IOS
  	const char* launchFlag = iOS_GetLaunchGameFlag();
  
-@@ -579,7 +586,9 @@ int exult_main(const char* runpath) {
+@@ -579,7 +587,9 @@ int exult_main(const char* runpath) {
  	std::cout << std::endl;
  
  	// Check CRCs of our .flx files
@@ -86,7 +108,7 @@ index 4ba1584..a51b1a9 100644
  	const char*  flexname = BUNDLE_CHECK(BUNDLE_EXULT_FLX, EXULT_FLX);
  	const uint32 crc      = crc32(flexname);
  	if (crc != EXULT_FLX_CRC32) {
-@@ -596,6 +605,8 @@ int exult_main(const char* runpath) {
+@@ -596,6 +606,8 @@ int exult_main(const char* runpath) {
  		crc_ok = false;
  		cerr << "exult_si.flx has a wrong checksum!" << endl;
  	}
@@ -95,7 +117,7 @@ index 4ba1584..a51b1a9 100644
  
  	bool config_ignore_crc;
  	config->value("config/disk/no_crc", config_ignore_crc);
-@@ -663,6 +674,8 @@ int exult_main(const char* runpath) {
+@@ -663,6 +675,8 @@ int exult_main(const char* runpath) {
  	touchui = new TouchUI_iOS();
  #elif defined(ANDROID)
  	touchui = new TouchUI_Android();
@@ -104,7 +126,7 @@ index 4ba1584..a51b1a9 100644
  #endif
  	Init();    // Create main window.
  
-@@ -798,6 +811,9 @@ static void Init() {
+@@ -798,6 +812,9 @@ static void Init() {
  		exit(-1);
  	}
  	std::atexit(SDL_Quit);
@@ -115,10 +137,15 @@ index 4ba1584..a51b1a9 100644
  	// KBD repeat should be nice.
  	SDL_HideCursor();
 diff --git a/exultmenu.cc b/exultmenu.cc
-index 7427b67..f9750fe 100644
+index 7427b67..2188d5b 100644
 --- a/exultmenu.cc
 +++ b/exultmenu.cc
-@@ -154,6 +154,16 @@ static inline bool handle_menu_click(int id, int& first, int last_page, int page
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  Copyright (C) 2000-2025  The Exult Team
+  *
+@@ -154,6 +155,16 @@ static inline bool handle_menu_click(int id, int& first, int last_page, int page
  	}
  }
  
@@ -135,7 +162,7 @@ index 7427b67..f9750fe 100644
  int maximum_size(std::shared_ptr<Font> font, tcb::span<const char* const> options, int centerx) {
  	ignore_unused_variable_warning(centerx);
  	int max_width = 0;
-@@ -207,7 +217,12 @@ void ExultMenu::calc_win() {
+@@ -207,7 +218,12 @@ void ExultMenu::calc_win() {
  	centerx  = gwin->get_width() / 2;
  	centery  = gwin->get_height() / 2;
  	auto fnt = font ? font : fontManager.get_font("CREDITS_FONT");
@@ -148,7 +175,7 @@ index 7427b67..f9750fe 100644
  }
  
  void ExultMenu::setup() {
-@@ -263,12 +278,16 @@ std::unique_ptr<MenuList> ExultMenu::create_main_menu(int first) {
+@@ -263,12 +279,16 @@ std::unique_ptr<MenuList> ExultMenu::create_main_menu(int first) {
  		std::cerr << "Exult.flx file is corrupted. Please reinstall Exult." << std::endl;
  		throw quit_exception();
  	}
@@ -167,7 +194,7 @@ index 7427b67..f9750fe 100644
  		const ModManager& exultgame = game_list[i];
  		const bool have_sfx = Audio::have_config_sfx(exultgame.get_cfgname()) || Audio::have_roland_sfx(exultgame.get_game_type())
  							  || Audio::have_sblaster_sfx(exultgame.get_game_type()) || Audio::have_midi_sfx();
-@@ -282,9 +301,13 @@ std::unique_ptr<MenuList> ExultMenu::create_main_menu(int first) {
+@@ -282,9 +302,13 @@ std::unique_ptr<MenuList> ExultMenu::create_main_menu(int first) {
  			mod_entry->set_id(i + MAX_GAMES);
  			menu->add_entry(mod_entry);
  		}
@@ -181,7 +208,7 @@ index 7427b67..f9750fe 100644
  	}
  
  	create_scroller_menu(
-@@ -305,7 +328,7 @@ std::unique_ptr<MenuList> ExultMenu::create_main_menu(int first) {
+@@ -305,7 +329,7 @@ std::unique_ptr<MenuList> ExultMenu::create_main_menu(int first) {
  		total_text_width += font->get_text_width(choice);
  	}
  	const int count      = static_cast<int>(menuchoices.size());
@@ -190,7 +217,7 @@ index 7427b67..f9750fe 100644
  	const int total_span = total_text_width + (count - 1) * gap;
  	xpos                 = centerx - total_span / 2;
  	ypos                 = gwin->get_win()->get_end_y() - 3 * font->get_text_height();
-@@ -325,13 +348,13 @@ std::unique_ptr<MenuList> ExultMenu::create_mods_menu(ModManager* selgame, int f
+@@ -325,13 +349,13 @@ std::unique_ptr<MenuList> ExultMenu::create_mods_menu(ModManager* selgame, int f
  	auto menu = std::make_unique<MenuList>();
  
  	int ypos = 15 + gwin->get_win()->get_start_y();
@@ -207,10 +234,15 @@ index 7427b67..f9750fe 100644
  		auto*          entry    = new MenuGameEntry(fonton, font, exultmod.get_menu_string().c_str(), nullptr, menux, ypos);
  		entry->set_id(i);
 diff --git a/files/utils.cc b/files/utils.cc
-index 6f68316..4d623e9 100644
+index 6f68316..2d95965 100644
 --- a/files/utils.cc
 +++ b/files/utils.cc
-@@ -38,6 +38,7 @@
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  utils.cc - Common utility routines.
+  *
+@@ -38,6 +39,7 @@
  #include <cstdio>
  #include <cstdlib>
  #include <cstring>
@@ -218,7 +250,7 @@ index 6f68316..4d623e9 100644
  #include <exception>
  #include <fstream>
  #include <list>
-@@ -76,6 +77,15 @@
+@@ -76,6 +78,15 @@
  #	endif    // __GNUC__
  #endif
  
@@ -234,7 +266,7 @@ index 6f68316..4d623e9 100644
  using std::ios;
  using std::string;
  
-@@ -85,6 +95,239 @@ static void switch_slashes(string& name);
+@@ -85,6 +96,239 @@ static void switch_slashes(string& name);
  static bool base_to_uppercase(string& str, int count);
  
  // Global factories for instantiating file streams
@@ -474,7 +506,7 @@ index 6f68316..4d623e9 100644
  static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openmode mode) {
  	return std::make_unique<std::ifstream>(s, mode);
  };
-@@ -92,6 +335,7 @@ static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openm
+@@ -92,6 +336,7 @@ static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openm
  static U7OstreamFactory ostream_factory = [](const char* s, std::ios_base::openmode mode) {
  	return std::make_unique<std::ofstream>(s, mode);
  };
@@ -482,7 +514,7 @@ index 6f68316..4d623e9 100644
  
  // Ugly hack for supporting different paths
  
-@@ -257,6 +501,12 @@ static bool base_to_uppercase(string& str, int count) {
+@@ -257,6 +502,12 @@ static bool base_to_uppercase(string& str, int count) {
  	if (count <= 0) {
  		return true;
  	}
@@ -496,10 +528,15 @@ index 6f68316..4d623e9 100644
  	int todo = count;
  	// Go backwards.
 diff --git a/gamemgr/bggame.cc b/gamemgr/bggame.cc
-index a2ab01b..7b7241c 100644
+index a2ab01b..00b5c64 100644
 --- a/gamemgr/bggame.cc
 +++ b/gamemgr/bggame.cc
-@@ -231,7 +231,10 @@ BG_Game::BG_Game() : shapes(ENDSHAPE_FLX, -1, PATCH_ENDSHAPE) {
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  Copyright (C) 2000-2022  The Exult Team
+  *
+@@ -231,7 +232,10 @@ BG_Game::BG_Game() : shapes(ENDSHAPE_FLX, -1, PATCH_ENDSHAPE) {
  	File_spec   font_source;
  	const char* font_patch = nullptr;
  	int         vlead      = 0;
@@ -511,7 +548,7 @@ index a2ab01b..7b7241c 100644
  		font_source = File_spec(fname, EXULT_FLX_FONTS_SERIF_VGA);
  		font_patch  = PATCH_SERIF_FONTS;
  	} else if (font_config == "disabled") {
-@@ -248,7 +251,7 @@ BG_Game::BG_Game() : shapes(ENDSHAPE_FLX, -1, PATCH_ENDSHAPE) {
+@@ -248,7 +252,7 @@ BG_Game::BG_Game() : shapes(ENDSHAPE_FLX, -1, PATCH_ENDSHAPE) {
  	fontManager.add_font("SMALL_BLACK_FONT", font_source, font_patch, 2, 0);
  	fontManager.add_font("TINY_BLACK_FONT", font_source, font_patch, 4, 0);
  
@@ -521,10 +558,15 @@ index a2ab01b..7b7241c 100644
  		fontManager.add_font("GUARDIAN_FONT", font_source, font_patch, 11, -2);
  		fontManager.add_font("END2_FONT", font_source, font_patch, 12, -1);
 diff --git a/gamemgr/sigame.cc b/gamemgr/sigame.cc
-index aaca200..0aaedcd 100644
+index aaca200..41744fc 100644
 --- a/gamemgr/sigame.cc
 +++ b/gamemgr/sigame.cc
-@@ -205,7 +205,10 @@ SI_Game::SI_Game() {
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  Copyright (C) 2000-2022  The Exult Team
+  *
+@@ -205,7 +206,10 @@ SI_Game::SI_Game() {
  	File_spec   font_source;
  	const char* font_patch = nullptr;
  	int         vlead      = 0;
@@ -536,7 +578,7 @@ index aaca200..0aaedcd 100644
  		font_source = File_spec(fname, EXULT_FLX_FONTS_SERIF_VGA);
  		font_patch  = PATCH_SERIF_FONTS;
  	} else if (font_config == "disabled") {
-@@ -221,7 +224,7 @@ SI_Game::SI_Game() {
+@@ -221,7 +225,7 @@ SI_Game::SI_Game() {
  	fontManager.add_font("SMALL_BLACK_FONT", font_source, font_patch, 2, 0);
  	fontManager.add_font("TINY_BLACK_FONT", font_source, font_patch, 4, 0);
  
@@ -546,10 +588,15 @@ index aaca200..0aaedcd 100644
  		fontManager.add_font("SIINTRO_FONT", font_source, font_patch, 15, 0, vlead);
  		fontManager.add_font("EXULT_END_FONT", font_source, font_patch, 14, -2, vlead);
 diff --git a/gamerend.cc b/gamerend.cc
-index 342436d..c918192 100644
+index 342436d..d21490e 100644
 --- a/gamerend.cc
 +++ b/gamerend.cc
-@@ -23,6 +23,9 @@
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  gamerend.cc - Rendering methods.
+  *
+@@ -23,6 +24,9 @@
  #	include <config.h>
  #endif
  
@@ -559,7 +606,7 @@ index 342436d..c918192 100644
  #include "gamerend.h"
  
  #include "Gump.h"
-@@ -358,6 +361,9 @@ void Game_window::paint(
+@@ -358,6 +362,9 @@ void Game_window::paint(
  
  	int light_sources = 0;
  
@@ -569,7 +616,7 @@ index 342436d..c918192 100644
  	if (main_actor) {
  		light_sources = render->paint_map(gx, gy, gw, gh);
  	} else {
-@@ -365,6 +371,9 @@ void Game_window::paint(
+@@ -365,6 +372,9 @@ void Game_window::paint(
  	}
  
  	effects->paint();    // Draw sprites.
@@ -579,7 +626,7 @@ index 342436d..c918192 100644
  
  	win->set_clip(x, y, w, h);    // Clip to this area.
  	// Fill black into unpainted regions
-@@ -609,7 +618,13 @@ void Game_render::paint_object(Game_object* obj) {
+@@ -609,7 +619,13 @@ void Game_render::paint_object(Game_object* obj) {
  		obj->get_info().paint_bbox(
  				bbox_x, bbox_y, obj->get_framenum(), Game_window::get_instance()->get_win()->get_ib8(), bbox_palindex, 2);
  	}
@@ -594,10 +641,15 @@ index 342436d..c918192 100644
  	if (bbox_palindex != -1) {
  		obj->get_info().paint_bbox(
 diff --git a/gamewin.cc b/gamewin.cc
-index e40fbdd..90c7ad3 100644
+index e40fbdd..8f2a68a 100644
 --- a/gamewin.cc
 +++ b/gamewin.cc
-@@ -407,7 +407,11 @@ Game_window::Game_window(
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /**
+  ** Gamewin.cc - X-windows Ultima7 map browser.
+  **
+@@ -407,7 +408,11 @@ Game_window::Game_window(
  	const string default_scroll_with_mouse = "yes";
  	const string default_item_menu         = "no";
  	const string default_dpad_location     = "no";
@@ -610,7 +662,7 @@ index e40fbdd..90c7ad3 100644
  	const string default_shortcutbar       = "no";
  	const string default_outline           = "no";
  #endif
-@@ -618,7 +622,7 @@ void Game_window::init_files(bool cycle) {
+@@ -618,7 +623,7 @@ void Game_window::init_files(bool cycle) {
  
  	int fps;    // Init. animation speed.
  	config->value("config/video/fps", fps, 5);
@@ -620,10 +672,15 @@ index e40fbdd..90c7ad3 100644
  	}
  	std_delay = 1000 / fps;    // Convert to msecs. between frames.
 diff --git a/gumps/GameDisplayOptions_gump.cc b/gumps/GameDisplayOptions_gump.cc
-index 25d37b5..090b3c2 100644
+index 25d37b5..da79c38 100644
 --- a/gumps/GameDisplayOptions_gump.cc
 +++ b/gumps/GameDisplayOptions_gump.cc
-@@ -344,7 +344,7 @@ void GameDisplayOptions_gump::build_buttons() {
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  Copyright (C) 2001-2024  The Exult Team
+  *
+@@ -344,7 +345,7 @@ void GameDisplayOptions_gump::build_buttons() {
  			this, &GameDisplayOptions_gump::toggle_language, languages_txt, language,
  			get_button_pos_for_label(Strings::Language_()), yForRow(++y_index), large_size);
  
@@ -632,7 +689,7 @@ index 25d37b5..090b3c2 100644
  	buttons[id_fonts] = std::make_unique<GameDisplayTextToggle>(
  			this, &GameDisplayOptions_gump::toggle_fonts, fonts_txt, fonts, get_button_pos_for_label(Strings::Fonts_()),
  			yForRow(++y_index), large_size);
-@@ -402,6 +402,8 @@ void GameDisplayOptions_gump::load_settings() {
+@@ -402,6 +403,8 @@ void GameDisplayOptions_gump::load_settings() {
  		fonts = 1;
  	} else if (value == "disabled") {
  		fonts = 2;
@@ -641,7 +698,7 @@ index 25d37b5..090b3c2 100644
  	} else {
  		fonts = 0;    // original
  	}
-@@ -481,7 +483,7 @@ void GameDisplayOptions_gump::save_settings() {
+@@ -481,7 +484,7 @@ void GameDisplayOptions_gump::save_settings() {
  		Game::setup_text();
  	}
  
@@ -651,10 +708,15 @@ index 25d37b5..090b3c2 100644
  		config->set("config/gameplay/fonts", fontcodes[fonts], false);
  		// Reload fonts if font selection changed
 diff --git a/gumps/GameEngineOptions_gump.cc b/gumps/GameEngineOptions_gump.cc
-index f067603..cf8a079 100644
+index f067603..ba3ca89 100644
 --- a/gumps/GameEngineOptions_gump.cc
 +++ b/gumps/GameEngineOptions_gump.cc
-@@ -284,7 +284,7 @@ void GameEngineOptions_gump::load_settings() {
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  Copyright (C) 2001-2024  The Exult Team
+  *
+@@ -284,7 +285,7 @@ void GameEngineOptions_gump::load_settings() {
  	int fps;
  	config->value("config/video/fps", fps, 5);
  	// check that we don't get a negative framerate value
@@ -663,7 +725,7 @@ index f067603..cf8a079 100644
  		fps = 5;    // default should be 5 frames
  	}
  	// Now we want to populate the framerates vector and match our current text
-@@ -332,9 +332,13 @@ void GameEngineOptions_gump::save_settings() {
+@@ -332,9 +333,13 @@ void GameEngineOptions_gump::save_settings() {
  	config->set("config/gameplay/allow_autonotes", allow_autonotes ? "yes" : "no", false);
  	gwin->set_allow_enhancements(enhancements);
  	config->set("config/gameplay/enhancements", enhancements ? "yes" : "no", false);
@@ -681,10 +743,15 @@ index f067603..cf8a079 100644
  	cheat.SetFoodUse(Cheat::FoodUse(feeding), false);
  	gumpman->set_gumps_dont_pause_game(!gumps_pause);
 diff --git a/gumps/Sign_gump.cc b/gumps/Sign_gump.cc
-index 592c4b0..cd25f62 100644
+index 592c4b0..1ca44bc 100644
 --- a/gumps/Sign_gump.cc
 +++ b/gumps/Sign_gump.cc
-@@ -112,6 +112,10 @@ void Sign_gump::add_text(int line, const std::string& txt) {
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+ Copyright (C) 2000-2022 The Exult Team
+ 
+@@ -112,6 +113,10 @@ void Sign_gump::add_text(int line, const std::string& txt) {
   *  Paint sign.
   */
  
@@ -695,7 +762,7 @@ index 592c4b0..cd25f62 100644
  void Sign_gump::paint() {
  	Shape_frame* shape = get_shape();
  	if (!shape) {
-@@ -162,6 +166,9 @@ void Sign_gump::paint() {
+@@ -162,6 +167,9 @@ void Sign_gump::paint() {
  	}
  	x = oldx;
  	y = oldy;
@@ -706,10 +773,15 @@ index 592c4b0..cd25f62 100644
  	end_layer_paint(w, h, prev);
  	gwin->set_painted();
 diff --git a/gumps/Text_gump.cc b/gumps/Text_gump.cc
-index 658e4c2..442d796 100644
+index 658e4c2..d13283e 100644
 --- a/gumps/Text_gump.cc
 +++ b/gumps/Text_gump.cc
-@@ -30,6 +30,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+ Copyright (C) 2000-2025 The Exult Team
+ 
+@@ -30,6 +31,13 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
  
  using std::strchr;
  
@@ -723,7 +795,7 @@ index 658e4c2..442d796 100644
  bool Text_gump::begin_layer_paint(int drawx, int drawy, int& ox, int& oy, int& w, int& h, Image_buffer8*& prev_target) {
  	Game_window* gwin = Game_window::get_instance();
  	if (!gwin) {
-@@ -80,11 +87,18 @@ void Text_gump::end_layer_paint(int w, int h, Image_buffer8* prev_target) {
+@@ -80,11 +88,18 @@ void Text_gump::end_layer_paint(int w, int h, Image_buffer8* prev_target) {
  	const float   dx   = (static_cast<float>(iwin->get_display_width()) - dw) / 2.0f;
  	const float   dy   = (static_cast<float>(iwin->get_display_height()) - dh) / 2.0f;
  	gwin->layer_set_dest(render_layer, static_cast<int>(dx), static_cast<int>(dy), static_cast<int>(dw), static_cast<int>(dh));
@@ -742,7 +814,7 @@ index 658e4c2..442d796 100644
  	delete[] text;
  	free_render_layer();
  }
-@@ -292,5 +306,8 @@ int Text_gump::show_next_page() {
+@@ -292,5 +307,8 @@ int Text_gump::show_next_page() {
  	}
  
  	paint();    // Paint.  This updates curend.
@@ -752,10 +824,15 @@ index 658e4c2..442d796 100644
  	return 1;
  }
 diff --git a/imagewin/ibuf8.cc b/imagewin/ibuf8.cc
-index 115c2ae..a7caae2 100644
+index 115c2ae..71ec4f7 100644
 --- a/imagewin/ibuf8.cc
 +++ b/imagewin/ibuf8.cc
-@@ -23,6 +23,9 @@
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  ibuf8.cc - 8-bit image buffer.
+  *
+@@ -23,6 +24,9 @@
  #	include <config.h>
  #endif
  
@@ -765,7 +842,7 @@ index 115c2ae..a7caae2 100644
  #include "ibuf8.h"
  
  #include "common_types.h"
-@@ -45,6 +48,9 @@ void Image_buffer8::copy(
+@@ -45,6 +49,9 @@ void Image_buffer8::copy(
  		int srcw, int srch,     // Dimensions to copy.
  		int destx, int desty    // Where to copy to.
  ) {
@@ -776,10 +853,15 @@ index 115c2ae..a7caae2 100644
  	int yfrom;
  	int yto;                // Figure y stuff.
 diff --git a/imagewin/imagewin.cc b/imagewin/imagewin.cc
-index 57224c7..f99a286 100644
+index 57224c7..d3161bd 100644
 --- a/imagewin/imagewin.cc
 +++ b/imagewin/imagewin.cc
-@@ -69,6 +69,10 @@ Boston, MA  02111-1307, USA.
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /**
+ **  Imagewin.cc - A window to blit images into.
+ **
+@@ -69,6 +70,10 @@ Boston, MA  02111-1307, USA.
  
  bool SaveIMG_RW(SDL_Surface* saveme, SDL_IOStream* dst, bool freedst, int guardband);
  
@@ -790,7 +872,7 @@ index 57224c7..f99a286 100644
  using std::cerr;
  using std::cout;
  using std::endl;
-@@ -2167,6 +2171,50 @@ void Image_window::composite_layers() {
+@@ -2167,6 +2172,50 @@ void Image_window::composite_layers() {
  	}
  }
  
@@ -841,7 +923,7 @@ index 57224c7..f99a286 100644
  void Image_window::UpdateRect(SDL_FRect* dirtyRect, SDL_FRect* fullRect, bool for_screenshot) {
  	auto perfcounter = PerformanceTimer::GetScopedPerfTimer(__func__);
  
-@@ -2216,6 +2264,9 @@ void Image_window::UpdateRect(SDL_FRect* dirtyRect, SDL_FRect* fullRect, bool fo
+@@ -2216,6 +2265,9 @@ void Image_window::UpdateRect(SDL_FRect* dirtyRect, SDL_FRect* fullRect, bool fo
  			std::cerr << "SDL_RenderPresent failed: " << (err ? err : "") << std::endl;
  			SDL_ClearError();
  		}
@@ -852,10 +934,15 @@ index 57224c7..f99a286 100644
  }
  
 diff --git a/imagewin/imagewin.h b/imagewin/imagewin.h
-index 2452312..cf80455 100644
+index 2452312..66d9417 100644
 --- a/imagewin/imagewin.h
 +++ b/imagewin/imagewin.h
-@@ -699,6 +699,12 @@ class Image_window {
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /**
+ **  Imagewin.h - A window to blit images into.
+ **
+@@ -699,6 +700,12 @@ class Image_window {
  	// is drawn at the given integer scale.  'z' orders layers: higher values
  	// are composited on top.
  	int           create_layer(std::string&& name, int w, int h, unsigned char transparent = 255, int fixed_scale = 0, int z = 0);
@@ -869,10 +956,15 @@ index 2452312..cf80455 100644
  	Image_buffer* get_layer_ibuf(int handle);
  	// Mark a layer's buffer as changed so it is re-uploaded before the next
 diff --git a/scene_layer.h b/scene_layer.h
-index ec09ddf..b75069e 100644
+index ec09ddf..dd7b80b 100644
 --- a/scene_layer.h
 +++ b/scene_layer.h
-@@ -48,7 +48,14 @@ class Scene_layer {
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  scene_layer.h - Full-screen "scene" overlay layer helper.
+  *
+@@ -48,7 +49,14 @@ class Scene_layer {
  		// of the configured game fill mode, so screens use the entire screen
  		// instead of a potentiall small aspect-correct/letterboxed rectangle.
  		gwin->set_ui_layer_config(
@@ -889,10 +981,15 @@ index ec09ddf..b75069e 100644
  		handle = gwin->create_layer("scene", scene_w, scene_h, transparent_index, 0, scene_layer_z);
  		if (handle >= 0) {
 diff --git a/shapeid.cc b/shapeid.cc
-index 43cb583..836d56e 100644
+index 43cb583..6bfed81 100644
 --- a/shapeid.cc
 +++ b/shapeid.cc
-@@ -288,7 +288,10 @@ void Shape_manager::load() {
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  Copyright (C) 2000-2022  The Exult Team
+  *
+@@ -288,7 +289,10 @@ void Shape_manager::load() {
  	File_spec   font_source;
  	File_spec   font_patch;
  	const char* fname = BUNDLE_CHECK(BUNDLE_EXULT_FLX, EXULT_FLX);
@@ -904,7 +1001,7 @@ index 43cb583..836d56e 100644
  		font_source = File_spec(fname, EXULT_FLX_FONTS_SERIF_VGA);
  		font_patch  = PATCH_SERIF_FONTS;
  	} else if (font_config == "disabled") {
-@@ -438,7 +441,10 @@ void Shape_manager::reload_shapes(int shape_kind    // Type from u7drag.h.
+@@ -438,7 +442,10 @@ void Shape_manager::reload_shapes(int shape_kind    // Type from u7drag.h.
  		const char* fname = BUNDLE_CHECK(BUNDLE_EXULT_FLX, EXULT_FLX);
  		File_spec   font_source;
  		File_spec   font_patch;
@@ -917,10 +1014,15 @@ index 43cb583..836d56e 100644
  			font_patch  = PATCH_SERIF_FONTS;
  		} else if (font_config == "disabled") {
 diff --git a/shapes/vgafile.cc b/shapes/vgafile.cc
-index ad61544..a502a79 100644
+index ad61544..8155d64 100644
 --- a/shapes/vgafile.cc
 +++ b/shapes/vgafile.cc
-@@ -24,6 +24,12 @@
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  vgafile.cc - Handle access to one of the xxx.vga files.
+  *
+@@ -24,6 +25,12 @@
  #endif
  
  #include "vgafile.h"
@@ -933,7 +1035,7 @@ index ad61544..a502a79 100644
  
  #include "Flex.h"
  #include "databuf.h"
-@@ -495,6 +501,7 @@ void Shape_frame::paint_rle(
+@@ -495,6 +502,7 @@ void Shape_frame::paint_rle(
  	}
  
  	win->paint_rle(xoff, yoff, data.get());
@@ -941,7 +1043,7 @@ index ad61544..a502a79 100644
  }
  
  /*
-@@ -516,6 +523,7 @@ void Shape_frame::paint_rle_remapped(
+@@ -516,6 +524,7 @@ void Shape_frame::paint_rle_remapped(
  	}
  
  	win->paint_rle_remapped(xoff, yoff, data.get(), trans);
@@ -949,7 +1051,7 @@ index ad61544..a502a79 100644
  }
  
  /*
-@@ -530,6 +538,9 @@ void Shape_frame::paint(
+@@ -530,6 +539,9 @@ void Shape_frame::paint(
  		paint_rle(win, xoff, yoff);
  	} else {
  		win->copy8(data.get(), c_tilesize, c_tilesize, xoff - c_tilesize, yoff - c_tilesize);
@@ -959,7 +1061,7 @@ index ad61544..a502a79 100644
  	}
  }
  
-@@ -552,6 +563,7 @@ void Shape_frame::paint_rle_translucent(
+@@ -552,6 +564,7 @@ void Shape_frame::paint_rle_translucent(
  			return;
  		}
  	}
@@ -968,10 +1070,15 @@ index ad61544..a502a79 100644
  	const int    xfstart = 0xff - xfcnt;
  	const uint8* in      = data.get();
 diff --git a/shapes/vgafile.h b/shapes/vgafile.h
-index 398c3c1..6d4fa8e 100644
+index 398c3c1..3a36fdd 100644
 --- a/shapes/vgafile.h
 +++ b/shapes/vgafile.h
-@@ -70,6 +70,10 @@ class Shape_frame {
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  vgafile.h - Handle access to one of the xxx.vga files.
+  *
+@@ -70,6 +71,10 @@ class Shape_frame {
  		scrwin = w;
  	}
  
@@ -983,10 +1090,15 @@ index 398c3c1..6d4fa8e 100644
  		return data.get();
  	}
 diff --git a/usecode/conversation.cc b/usecode/conversation.cc
-index 7354919..b073540 100644
+index 7354919..1a5e4fd 100644
 --- a/usecode/conversation.cc
 +++ b/usecode/conversation.cc
-@@ -22,6 +22,8 @@
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  Copyright (C) 2001-2025  The Exult Team
+  *
+@@ -22,6 +23,8 @@
  
  #include "conversation.h"
  
@@ -995,7 +1107,7 @@ index 7354919..b073540 100644
  #include "Face_stats.h"
  #include "Gump_manager.h"
  #include "ShortcutBar_gump.h"
-@@ -76,6 +78,17 @@ namespace {
+@@ -76,6 +79,17 @@ namespace {
  // TODO: show_face & show_avatar_choices seem to share code?
  // TODO: show_avatar_choices shouldn't first convert to char**, probably
  
@@ -1013,7 +1125,7 @@ index 7354919..b073540 100644
  bool Conversation::noface = false;
  
  /*
-@@ -311,7 +324,7 @@ void Conversation::render_conv_layer() {
+@@ -311,7 +325,7 @@ void Conversation::render_conv_layer() {
  			bbuf->clear_clip();
  			gwin->pop_render_target(prev_bg);
  			gwin->layer_set_dirty(bgl);
@@ -1022,7 +1134,7 @@ index 7354919..b073540 100644
  		}
  	}
  	Image_buffer8* prev = gwin->push_render_target(lbuf);
-@@ -324,7 +337,7 @@ void Conversation::render_conv_layer() {
+@@ -324,7 +338,7 @@ void Conversation::render_conv_layer() {
  	lbuf->clear_clip();
  	gwin->pop_render_target(prev);
  	gwin->layer_set_dirty(cl);
@@ -1031,7 +1143,7 @@ index 7354919..b073540 100644
  }
  
  /*
-@@ -620,7 +633,7 @@ void Conversation::show_npc_message(const char* msg) {
+@@ -620,7 +634,7 @@ void Conversation::show_npc_message(const char* msg) {
  			bbuf->clear_clip();
  			gwin->pop_render_target(prev_bg);
  			gwin->layer_set_dirty(bgl);
@@ -1040,7 +1152,7 @@ index 7354919..b073540 100644
  		}
  		Image_buffer8* prev = lbuf ? gwin->push_render_target(lbuf) : nullptr;
  		if (lbuf) {
-@@ -629,11 +642,16 @@ void Conversation::show_npc_message(const char* msg) {
+@@ -629,11 +643,16 @@ void Conversation::show_npc_message(const char* msg) {
  			paint_faces(true);
  		}
  		height = sman->paint_text_box(font, msg, box.x, box.y, box.w, box.h, -1, true, info->large_face, -1);
@@ -1058,7 +1170,7 @@ index 7354919..b073540 100644
  		}
  		if (height >= 0) {
  			break;    // All of the text fit.
-@@ -809,7 +827,7 @@ void Conversation::show_avatar_choices(int num_choices, char** choices) {
+@@ -809,7 +828,7 @@ void Conversation::show_avatar_choices(int num_choices, char** choices) {
  			}
  			gwin->pop_render_target(prev_bg);
  			gwin->layer_set_dirty(bgl);
@@ -1068,10 +1180,15 @@ index 7354919..b073540 100644
  	}
  	// Second pass: draw all text on top of backgrounds.
 diff --git a/usecode/conversation.h b/usecode/conversation.h
-index 92b4c23..f2e9651 100644
+index 92b4c23..1c9f3b2 100644
 --- a/usecode/conversation.h
 +++ b/usecode/conversation.h
-@@ -50,6 +50,10 @@ class Conversation : public Game_singletons, public Paintable {
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  Copyright (C) 2001-2022  The Exult Team
+  *
+@@ -50,6 +51,10 @@ class Conversation : public Game_singletons, public Paintable {
  	std::deque<std::vector<std::string>> answer_stack;
  
  public:
@@ -1083,10 +1200,15 @@ index 92b4c23..f2e9651 100644
  		return answers.size();
  	}
 diff --git a/usecode/ucmachine.h b/usecode/ucmachine.h
-index 0c0ff81..a2b9569 100644
+index 0c0ff81..6a1f9cb 100644
 --- a/usecode/ucmachine.h
 +++ b/usecode/ucmachine.h
-@@ -61,6 +61,10 @@ class Usecode_machine : nonreplicatable, public Game_singletons {
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-10 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  ucmachine.cc - Interpreter for usecode.
+  *
+@@ -61,6 +62,10 @@ class Usecode_machine : nonreplicatable, public Game_singletons {
  	constexpr static const size_t last_gflag     = max_num_gflags - 1;
  
  	friend class Usecode_script;

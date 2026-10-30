@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 the exult-3ds authors
 """Build fonts_modern.vga for Exult-3DS: a modern, readable replacement for
 Ultima VII's blackletter text fonts.
 

@@ -1,4 +1,6 @@
-﻿<#
+﻿# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 the exult-3ds authors
+<#
   Deploy-Exult.ps1 - the engine behind "Exult-3DS.cmd". Double-click that instead.
 
   Menu (no arguments):

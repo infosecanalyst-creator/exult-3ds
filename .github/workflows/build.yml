@@ -37,7 +37,11 @@ jobs:
           mkdir -p "$D/SD/3ds/exult"
           cp build/out/exult.3dsx "$D/SD/3ds/exult/"
           cp -r build/out/data "$D/SD/3ds/exult/"
-          cp Install-Exult.cmd Exult-3DS.cmd Deploy-Exult.ps1 Copy-U7-To-3DS.ps1 README.md TESTING.md LICENSE "$D/"
+          cp Install-Exult.cmd Exult-3DS.cmd Deploy-Exult.ps1 Copy-U7-To-3DS.ps1 README.md TESTING.md LICENSE THIRD_PARTY_NOTICES.txt "$D/"
+          # Licence files must ship in every zip: Exult's COPYING (GPL v2) and the
+          # notices of the statically linked libraries.
+          cp build/work/exult/COPYING "$D/COPYING"
+          for f in LICENSE COPYING THIRD_PARTY_NOTICES.txt; do test -s "$D/$f" || { echo "missing $f"; exit 1; }; done
           ls -la "$D" "$D/SD/3ds/exult"
 
       - uses: actions/upload-artifact@v4

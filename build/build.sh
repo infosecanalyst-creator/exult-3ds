@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 the exult-3ds authors
 # Rebuild exult.3dsx from source. Needs Docker (Docker Desktop on Windows: run from WSL or Git Bash).
 #   ./build.sh            -> out/exult.3dsx + out/data/*
 # Pinned to the same Exult / SDL3 commits the shipped binary was built from.

@@ -1,4 +1,6 @@
-﻿<#
+﻿# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 the exult-3ds authors
+<#
   Copy-U7-To-3DS.ps1 - puts Exult-3DS and your Ultima VII data on the 3DS SD card.
 
   Run in PowerShell from this folder:

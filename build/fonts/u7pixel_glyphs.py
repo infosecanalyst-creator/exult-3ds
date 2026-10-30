@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 the exult-3ds authors
 """U7 Pixel Sans: a pixel font drawn for the New 3DS top screen (400x240,
 ~95 ppi) and Ultima VII's 14-pixel text line.
 

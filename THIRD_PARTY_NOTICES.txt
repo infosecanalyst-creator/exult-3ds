@@ -1,0 +1,231 @@
+Third-party notices -- exult-3ds
+================================
+
+exult.3dsx is Exult (GPL-2.0-or-later, see LICENSE / COPYING) with the
+libraries below linked in statically. Their licences require their notices
+to accompany binary copies; they are reproduced here. Each release zip
+ships this file together with LICENSE (the GNU GPL v2) and COPYING (Exult's
+own copy of the GPL).
+
+  Library     Version / source                                   Licence
+  ----------  -------------------------------------------------  ------------
+  Exult       github.com/exult/exult (build/patches/EXULT_COMMIT) GPL-2.0-or-later
+  SDL3        github.com/libsdl-org/SDL (build/patches/SDL3_COMMIT),
+              patched (build/patches/sdl3-n3ds-virtual-input.patch) Zlib
+  libvorbis,  github.com/xiph/vorbis v1.3.7                       BSD-3-Clause
+  vorbisfile
+  libogg      devkitPro portlibs (3ds-libogg)                    BSD-3-Clause
+  zlib        devkitPro portlibs (3ds-zlib)                      Zlib
+  libctru     github.com/devkitPro/libctru                       Zlib
+  citro3d     github.com/devkitPro/citro3d                       Zlib
+  newlib      devkitARM C library                                BSD-style (see below)
+  libstdc++,  devkitARM GCC runtime                              GPL-3.0 with the
+  libgcc                                                         GCC Runtime Library
+                                                                 Exception
+
+Exult's source also contains code from other authors under GPL-compatible
+terms (for example the zip reader by Gilles Vollant, the FM OPL emulator
+and the xBR / hqNx scalers); their notices are kept in those source files
+in the Exult repository and are covered by Exult's GPL distribution.
+
+The Ultima VII game data is not part of this software and is not
+distributed with it.
+
+
+------------------------------------------------------------------------
+SDL3 -- Simple DirectMedia Layer (Zlib licence)
+------------------------------------------------------------------------
+The SDL3 source used here was altered for the 3DS port; the changes are in
+build/patches/sdl3-n3ds-virtual-input.patch and are marked in each file.
+
+Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
+  
+This software is provided 'as-is', without any express or implied
+warranty.  In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+  
+1. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software
+   in a product, an acknowledgment in the product documentation would be
+   appreciated but is not required. 
+2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+3. This notice may not be removed or altered from any source distribution.
+
+
+
+------------------------------------------------------------------------
+libvorbis / libvorbisfile (BSD-3-Clause)
+------------------------------------------------------------------------
+Copyright (c) 2002-2020 Xiph.org Foundation
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+- Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+- Neither the name of the Xiph.org Foundation nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION
+OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+------------------------------------------------------------------------
+libogg (BSD-3-Clause)
+------------------------------------------------------------------------
+Copyright (c) 2002, Xiph.org Foundation
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+- Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above copyright
+notice, this list of conditions and the following disclaimer in the
+documentation and/or other materials provided with the distribution.
+
+- Neither the name of the Xiph.org Foundation nor the names of its
+contributors may be used to endorse or promote products derived from
+this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION
+OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+------------------------------------------------------------------------
+zlib (Zlib licence)
+------------------------------------------------------------------------
+Copyright notice:
+
+ (C) 1995-2022 Jean-loup Gailly and Mark Adler
+
+  This software is provided 'as-is', without any express or implied
+  warranty.  In no event will the authors be held liable for any damages
+  arising from the use of this software.
+
+  Permission is granted to anyone to use this software for any purpose,
+  including commercial applications, and to alter it and redistribute it
+  freely, subject to the following restrictions:
+
+  1. The origin of this software must not be misrepresented; you must not
+     claim that you wrote the original software. If you use this software
+     in a product, an acknowledgment in the product documentation would be
+     appreciated but is not required.
+  2. Altered source versions must be plainly marked as such, and must not be
+     misrepresented as being the original software.
+  3. This notice may not be removed or altered from any source distribution.
+
+  Jean-loup Gailly        Mark Adler
+  jloup@gzip.org          madler@alumni.caltech.edu
+
+
+------------------------------------------------------------------------
+libctru (Zlib licence)
+------------------------------------------------------------------------
+Copyright (C) the libctru contributors (github.com/devkitPro/libctru)
+
+  This software is provided 'as-is', without any express or implied
+  warranty.  In no event will the authors be held liable for any
+  damages arising from the use of this software.
+
+  Permission is granted to anyone to use this software for any
+  purpose, including commercial applications, and to alter it and
+  redistribute it freely, subject to the following restrictions:
+
+  1. The origin of this software must not be misrepresented; you
+     must not claim that you wrote the original software. If you use
+     this software in a product, an acknowledgment in the product
+     documentation would be appreciated but is not required.
+  2. Altered source versions must be plainly marked as such, and
+     must not be misrepresented as being the original software.
+  3. This notice may not be removed or altered from any source
+     distribution.
+
+
+------------------------------------------------------------------------
+citro3d (Zlib licence)
+------------------------------------------------------------------------
+Copyright (C) 2014-2018 fincs
+
+This software is provided 'as-is', without any express or implied
+warranty.  In no event will the authors be held liable for any
+damages arising from the use of this software.
+
+Permission is granted to anyone to use this software for any
+purpose, including commercial applications, and to alter it and
+redistribute it freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you
+   must not claim that you wrote the original software. If you use
+   this software in a product, an acknowledgment in the product
+   documentation would be appreciated but is not required.
+2. Altered source versions must be plainly marked as such, and
+   must not be misrepresented as being the original software.
+3. This notice may not be removed or altered from any source
+   distribution.
+
+
+------------------------------------------------------------------------
+newlib (devkitARM C library)
+------------------------------------------------------------------------
+newlib is a collection of C library code under BSD-style and similar
+permissive licences from many copyright holders (Red Hat, the Regents of
+the University of California, and others). The complete set of notices is
+in COPYING.NEWLIB in the newlib source:
+  https://sourceware.org/git/?p=newlib-cygwin.git;a=blob;f=COPYING.NEWLIB
+devkitARM's newlib: https://github.com/devkitPro/newlib
+
+  Copyright (c) 1990 The Regents of the University of California.
+  All rights reserved.
+
+  Redistribution and use in source and binary forms are permitted
+  provided that the above copyright notice and this paragraph are
+  duplicated in all such forms and that any documentation,
+  and other materials related to such distribution and use
+  acknowledge that the software was developed
+  by the University of California, Berkeley.  The name of the
+  University may not be used to endorse or promote products derived
+  from this software without specific prior written permission.
+  THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR
+  IMPLIED WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED
+  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+
+
+------------------------------------------------------------------------
+libstdc++ / libgcc
+------------------------------------------------------------------------
+GPL-3.0 with the GCC Runtime Library Exception 3.1, which permits
+distributing programs compiled with GCC under terms of your choice:
+  https://www.gnu.org/licenses/gcc-exception-3.1.html

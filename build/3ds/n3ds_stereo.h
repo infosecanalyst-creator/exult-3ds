@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2026 the exult-3ds authors
 /*
  * Exult for New 3DS - stereoscopic 3D.
  *

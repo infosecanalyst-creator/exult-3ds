@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 the exult-3ds authors
 import struct
 def flex_entries(d):
     n=struct.unpack_from('<I',d,0x54)[0]

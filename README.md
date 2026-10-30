@@ -1,5 +1,9 @@
 # Exult for New 3DS: Ultima VII on both screens
 
+**Bring your own game files.** This is the Exult engine only; you need your own copy of Ultima VII (the GOG release works).
+
+*Not affiliated with or endorsed by the Exult team, Electronic Arts, Origin or Nintendo. Ultima is a trademark of Electronic Arts, used only to say which game files the engine reads.*
+
 A port of [Exult](https://exult.info), the engine for Ultima VII, to the **New Nintendo 3DS / New 3DS XL / New 2DS XL**. It plays **The Black Gate** (with Forge of Virtue) and **Serpent Isle** (with The Silver Seed), using game data you own (the GOG release works). It's built on the current Exult (1.13.1git) and SDL3's 3DS backend.
 
 The original game was played with a mouse. This port is built for the stylus:
@@ -170,6 +174,6 @@ What's in the source:
 
 ## Credits and license
 
-- **Exult:** © the Exult Team, GPL v2. This port is GPL v2 as well (see `LICENSE`).
-- **SDL3:** zlib license.
+- **Exult:** © the Exult Team, GPL-2.0-or-later. This is an unofficial port; its own files and its changes to Exult (`build/patches/`) are © the exult-3ds authors under the same licence, **GPL-2.0-or-later** (full text in `LICENSE`).
+- **SDL3** (zlib licence, patched for the port), **libvorbis** and **libogg** (BSD-3-Clause), **zlib**, **libctru** and **citro3d** (zlib licence) are linked into `exult.3dsx`. Their licence notices are in [`THIRD_PARTY_NOTICES.txt`](THIRD_PARTY_NOTICES.txt), which ships in every release zip with `LICENSE`.
 - **Ultima VII:** © Electronic Arts. Its data isn't included and isn't distributed here.

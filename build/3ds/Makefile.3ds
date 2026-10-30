@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2026 the exult-3ds authors
 # Exult for New Nintendo 3DS — devkitARM build (run inside devkitpro/devkitarm)
 include $(DEVKITARM)/base_tools
 include 3ds/objs.mk
@@ -26,7 +28,7 @@ all: exult.3dsx
 exult.elf: $(OBJS)
 	$(CXX) $(LDFLAGS) -o $@ $(OBJS) $(LIBS)
 exult.smdh: 3ds/icon.png
-	smdhtool --create "Exult (Ultima VII)" "The Black Gate & Serpent Isle" "Exult Team / 3DS port" 3ds/icon.png $@
+	smdhtool --create "Exult" "Engine for your own Ultima VII game files" "Exult (GPL) / unofficial 3DS port" 3ds/icon.png $@
 exult.3dsx: exult.elf exult.smdh
 	3dsxtool $< $@ --smdh=exult.smdh
 -include $(OBJS:.o=.d)

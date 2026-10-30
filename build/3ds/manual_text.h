@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+// Copyright (C) 2026 the exult-3ds authors
 // Generated from 3ds/manual.txt (the in-game manual). Regenerate with build/3ds/make_manual_h.py.
 #pragma once
 static const char* const N3DS_MANUAL_BUILTIN = R"MANUAL(# Welcome
