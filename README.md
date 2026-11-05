@@ -89,7 +89,7 @@ The full instruction manual is in the game: press **L+Y**, or tap the menu butto
   - party portraits (tap one for that inventory);
   - Spells, Notes, Map, Stats, Keys, Food, Target, Combat, Save;
   - the Manual, Swap screens and Game menu.
-- **ZL zooms** the touchscreen to 1.5× or 2× around the Avatar. Taps still land where you touch.
+- **L+R zooms** the touchscreen to 1.5× or 2× around the Avatar. Taps still land where you touch.
 - **L+START swaps the screens.** The game goes on top, where the 3D slider works, and the dashboard comes down. Touches then point and click 1:1 on the game above.
 - First-time tips appear on the top screen the first time each is relevant.
 
@@ -106,7 +106,7 @@ The full instruction manual is in the game: press **L+Y**, or tap the menu butto
 | D-Pad ↑ / ↓ | World map / party stats on the top screen |
 | D-Pad ← / → | Jump the cursor to the next nearby person or object |
 | R | Toggle combat |
-| ZL / ZR | Zoom the touchscreen / Target |
+| ZL / ZR | Swap screens / Target |
 | START | Game menu (save, load, options), or close windows |
 | SELECT | Quicksave |
 | L+START | Swap screens |

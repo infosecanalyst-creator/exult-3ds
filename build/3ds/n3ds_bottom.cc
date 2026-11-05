@@ -128,7 +128,7 @@ namespace {
 	constexpr int MB_X = GAME_W - 30, MB_Y = 2, MB_W = 28, MB_H = 22;
 	constexpr int ID_MENU_BUTTON = 399;
 
-	// Zoom (ZL): the touchscreen shows a smaller part of the game, enlarged.
+	// Zoom (L+R): the touchscreen shows a smaller part of the game, enlarged.
 	constexpr int ZOOM_STEPS = 3;
 	const int     zoom_w[ZOOM_STEPS] = {320, 214, 160}, zoom_h[ZOOM_STEPS] = {240, 160, 120};
 	const char*   zoom_name[ZOOM_STEPS] = {"", "ZOOM 1.5x", "ZOOM 2x"};
@@ -987,8 +987,8 @@ namespace {
 			{"Tap an answer to reply.", "Tap the text to move it on."},
 			{"Combat! R turns it on and off.", "Hold L + D-Pad down to pause."},
 			{"A tag on a portrait means trouble:", "FOOD = hungry, PSN = poisoned."},
-			{"ZL zooms the touchscreen in (1.5x, 2x).", "L+Y opens the manual on this screen."},
-			{"3D: L+START puts the game on the top", "screen. L+START again swaps back."},
+			{"ZL swaps screens. L+R zooms 1.5x, 2x.", "L+Y opens the manual on this screen."},
+			{"3D: ZL puts the game on the", "top screen. ZL again swaps back."},
 	};
 
 	unsigned              tips_seen   = 0;
@@ -1116,7 +1116,7 @@ namespace {
 			  "person or into an open backpack.",
 			  "Talking: tap an answer to reply,",
 			  "tap the text to move it on.",
-			  "ZL: zoom in 1.5x, 2x, then back.", nullptr}},
+			  "L+R: zoom in 1.5x, 2x, then back.", nullptr}},
 			{"The menu button",
 			 3,
 			 {"Three bars, top right of the game.",
@@ -1141,9 +1141,9 @@ namespace {
 			  "X use/talk     Y inventory",
 			  "D-Pad: up map, down stats,",
 			  "left/right next person or item",
-			  "R combat  ZL zoom  ZR target",
+			  "R combat  ZL swap  ZR target",
 			  "START menu   SELECT quicksave",
-			  "L+START swap screens  L+Y guide",
+			  "L+R zoom  L+Y guide",
 			  "L+D-Pad: watch, pause, lockpick, food",
 			  "L+SELECT quick-restore"}},
 			{"3D, saving and tips",
@@ -1784,10 +1784,14 @@ extern "C" u32 N3DS_KeyHook(u32 kDown, u32 kHeld) {
 		pending_swap = true;
 		taken |= KEY_START;
 	}
-	if (!l && (kDown & KEY_ZL) && !game_on_top) {
+	if (kDown & KEY_ZL) {    // ZL swaps the screens at any time
+		pending_swap = true;
+		taken |= KEY_ZL;
+	}
+	if (l && (kDown & KEY_R) && !game_on_top) {    // L+R zooms the touchscreen
 		zoom      = (zoom + 1) % ZOOM_STEPS;
 		last_draw = 0;
-		taken |= KEY_ZL;
+		taken |= KEY_R;
 		N3DS_Represent();
 	}
 	if (!l && (kDown & KEY_DUP) && help_page < 0) {
