@@ -1,0 +1,31 @@
+name: build-3dsx
+# Builds the 3DS binary and publishes it to the `builds` branch (3dsx + logs + SOURCE_COMMIT)
+# so it can be fetched without a local PC build.
+on:
+  push:
+    branches: ["**", "!builds"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: bash build/build.sh 2>&1 | tee build.log; test -f build/out/exult.3dsx
+      - name: Collect
+        if: always()
+        run: |
+          mkdir -p out
+          cp build/out/exult.3dsx build.log out/ 2>/dev/null || true
+          cp -r build/out/data out/ 2>/dev/null || true
+          echo "$GITHUB_SHA" > out/SOURCE_COMMIT
+      - name: Publish to builds branch
+        if: always()
+        run: |
+          cd out
+          git init -q -b builds
+          git config user.name "build-bot"; git config user.email "build-bot@users.noreply.github.com"
+          git add -A; git commit -qm "build of ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" builds
