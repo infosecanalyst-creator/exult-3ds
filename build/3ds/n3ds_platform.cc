@@ -682,9 +682,9 @@ extern "C" void n3ds_show_legend() {
 	printf("%s", "       menu button (top right) = everything else\n\n");
 	printf("%s", "     This screen then shows your party, a\n");
 	printf("%s", "     minimap, the time and recent messages.\n\n");
-	printf("%s", "     L+START  swap screens (3D on top)\n");
+	printf("%s", "     ZL       swap screens (3D on top)\n");
 	printf("%s", "     L+Y      manual     START  game menu\n");
-	printf("%s", "     ZL       zoom the touchscreen in / out\n");
+	printf("%s", "     L+R      zoom the touchscreen in / out\n");
 	printf("%s", "     -----------------------------------------\n");
 	if (!file_exists("sdmc:/3ds/dspfirm.cdc")) {
 		printf("%s", "\x1b[31m     NO SOUND: /3ds/dspfirm.cdc missing\n     (run DSP1 once to create it)\x1b[0m\n");
@@ -701,7 +701,7 @@ extern "C" void n3ds_after_sdl_init() {
 		// the legend to the PC terminal instead.
 		puts("[exult-3ds] the game is on the touchscreen: tap=click, double-tap=use/talk, hold=walk,\n"
 		     "  drag=move; menu button (top right) for the rest. Top screen = party, minimap, messages.\n"
-		     "  L+START swap screens (3D), L+Y guide, START game menu, SELECT quicksave.");
+		     "  ZL swap screens (3D), L+R zoom, L+Y guide, START game menu, SELECT quicksave.");
 		fflush(stdout);
 		return;
 	}

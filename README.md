@@ -90,7 +90,7 @@ The full instruction manual is in the game: press **L+Y**, or tap the menu butto
   - Spells, Notes, Map, Stats, Keys, Food, Target, Combat, Save;
   - the Manual, Swap screens and Game menu.
 - **L+R zooms** the touchscreen to 1.5× or 2× around the Avatar. Taps still land where you touch.
-- **L+START swaps the screens.** The game goes on top, where the 3D slider works, and the dashboard comes down. Touches then point and click 1:1 on the game above.
+- **ZL swaps the screens (L+START also works).** The game goes on top, where the 3D slider works, and the dashboard comes down. Touches then point and click 1:1 on the game above.
 - First-time tips appear on the top screen the first time each is relevant.
 
 ### Buttons
@@ -109,7 +109,7 @@ The full instruction manual is in the game: press **L+Y**, or tap the menu butto
 | ZL / ZR | Swap screens / Target |
 | START | Game menu (save, load, options), or close windows |
 | SELECT | Quicksave |
-| L+START | Swap screens |
+| L+START | Swap screens (same as ZL) |
 | L+Y | Manual |
 | Hold L + D-Pad | ↑ Watch · ↓ Pause combat · ← Lockpick · → Food |
 | L+SELECT / L+X | Quick-restore / Next music track |
@@ -119,7 +119,7 @@ Typing (the Avatar's name, save names) uses the 3DS keyboard.
 
 ### Stereoscopic 3D
 
-Swap the game onto the top screen with L+START, then push the 3D slider up:
+Swap the game onto the top screen with ZL, then push the 3D slider up:
 - The ground sits behind the screen.
 - People, walls, trees, upper floors and roofs come forward.
 - Windows and text stay on the screen plane.

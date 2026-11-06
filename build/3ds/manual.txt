@@ -44,7 +44,7 @@ The top screen also takes over to show the world map, the party's stats, convers
 | Hold still | Walk to where the stylus is.
 | Drag | Move an item: into a backpack, onto a person, onto the ground.
 
-Small things are easier to hit zoomed in: press ZL (see Zoom, 3D and swapping).
+Small things are easier to hit zoomed in: press L+R (see Zoom, 3D and swapping).
 
 # Buttons
 | Circle Pad | Walk
@@ -57,11 +57,12 @@ Small things are easier to hit zoomed in: press ZL (see Zoom, 3D and swapping).
 | D-Pad down | Party stats on the top screen
 | D-Pad left/right | Jump the cursor to the next person or object
 | R | Combat on / off
-| ZL | Zoom the touchscreen: 1.5x, 2x, normal
+| ZL | Swap the screens (any time)
+| L+R | Zoom the touchscreen: 1.5x, 2x, normal
 | ZR | Target mode
 | START | Game menu: save, load, options
 | SELECT | Quicksave
-| L+START | Swap the screens
+| L+START | Swap the screens (same as ZL)
 | L+Y | This manual
 | L+SELECT | Quick-restore
 | L+X | Next music track
@@ -97,10 +98,10 @@ Signs, plaques and gravestones keep their rune lettering, with the same words in
 
 # Zoom, 3D and swapping
 ## Zoom
-ZL zooms the touchscreen to 1.5x, then 2x, then back. The view follows the Avatar and taps still land where you touch. The top screen shows ZOOM while it is on.
+L+R zooms the touchscreen to 1.5x, then 2x, then back. The view follows the Avatar and taps still land where you touch. The top screen shows ZOOM while it is on.
 
 ## Swapping the screens
-L+START (or Swap screens in the menu) puts the game back on the top screen and the dashboard on the touchscreen. Touches then point and click on the game above, at the same spot. Press L+START again to swap back.
+ZL (or Swap screens in the menu, or L+START) puts the game back on the top screen and the dashboard on the touchscreen. Touches then point and click on the game above, at the same spot. Press ZL again to swap back.
 
 ## 3D
 3D works when the game is on the top screen: swap the screens, then push the 3D slider up. Roofs, trees and people rise out of the screen; windows and text stay flat.
