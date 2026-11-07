@@ -21,7 +21,7 @@ fetch libsdl-org/SDL sdl3 "$SDL3_COMMIT"
 git -C "$W/sdl3" apply "$HERE/patches/sdl3-n3ds-virtual-input.patch"
 git -C "$W/exult" apply "$HERE/patches/exult-3ds.patch"
 mkdir -p "$W/exult/3ds"
-cp "$HERE/3ds/n3ds_platform.cc" "$HERE/3ds/n3ds_bottom.cc" "$HERE/3ds/n3ds_stereo.cc" "$HERE/3ds/n3ds_stereo.h" "$HERE/3ds/manual_text.h" "$HERE/3ds/icon.png" "$W/exult/3ds/"
+cp "$HERE/3ds/n3ds_platform.cc" "$HERE/3ds/n3ds_bottom.cc" "$HERE/3ds/n3ds_stereo.cc" "$HERE/3ds/n3ds_stereo.h" "$HERE/3ds/manual_text.h" "$HERE/3ds/click3ds.h" "$HERE/3ds/icon.png" "$W/exult/3ds/"
 cp "$HERE/3ds/Makefile.3ds" "$W/exult/"
 sed -n '1,/^OBJS:=/p' "$W/exult/Makefile.common" > "$W/exult/3ds/objs.mk"
 
