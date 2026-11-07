@@ -50,6 +50,7 @@
 #include "ucmachine.h"
 #include "vgafile.h"
 #include "manual_text.h"
+#include "click3ds.h"
 
 #ifdef __GNUC__
 #	pragma GCC diagnostic push
@@ -2080,6 +2081,7 @@ extern "C" int N3DS_BottomTouch(int phase, int x, int y, float* nx, float* ny) {
 		const CHit* h = find();
 		if (phase == 0) {
 			cpressed = h ? h->answer : -2;
+			if (h) click3ds::play();
 		} else if (phase == 2) {
 			if (h && h->answer == cpressed) {
 				if (h->answer < 0) {
@@ -2100,6 +2102,7 @@ extern "C" int N3DS_BottomTouch(int phase, int x, int y, float* nx, float* ny) {
 		if (touch_ui) {
 			touch_hit     = menu_open ? hit_at(x, y) : -1;
 			pressed_id    = menu_open ? (touch_hit >= 0 ? mhits[touch_hit].id : -1) : ID_MENU_BUTTON;
+			if (pressed_id != -1) click3ds::play();   // standard: every button press clicks
 			menu_dirty    = true;
 			overlay_dirty = true;
 			last_draw     = 0;
