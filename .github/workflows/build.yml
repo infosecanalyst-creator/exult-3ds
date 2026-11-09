@@ -46,6 +46,7 @@ jobs:
 
       - name: Publish to builds branch
         if: github.ref == 'refs/heads/main'
+        shell: bash
         run: |
           mkdir -p out
           cp build/out/exult.3dsx out/
@@ -55,8 +56,9 @@ jobs:
           git init -q -b builds
           git config user.name "build-bot"; git config user.email "build-bot@users.noreply.github.com"
           git add -A; git commit -qm "build of ${GITHUB_SHA}"
-          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" builds
-
+          # main publishes to `builds` (what gets installed); other branches to builds-<branch>
+          dest=builds; [ "$GITHUB_REF_NAME" = main ] || dest="builds-${GITHUB_REF_NAME//\//-}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "builds:$dest"
       - uses: actions/upload-artifact@v4
         continue-on-error: true   # artifact storage quota can be full; the builds branch has the binary
         with:
