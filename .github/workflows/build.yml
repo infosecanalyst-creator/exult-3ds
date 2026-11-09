@@ -44,7 +44,21 @@ jobs:
           for f in LICENSE COPYING THIRD_PARTY_NOTICES.txt; do test -s "$D/$f" || { echo "missing $f"; exit 1; }; done
           ls -la "$D" "$D/SD/3ds/exult"
 
+      - name: Publish to builds branch
+        if: github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p out
+          cp build/out/exult.3dsx out/
+          cp -r build/out/data out/ 2>/dev/null || true
+          echo "$GITHUB_SHA" > out/SOURCE_COMMIT
+          cd out
+          git init -q -b builds
+          git config user.name "build-bot"; git config user.email "build-bot@users.noreply.github.com"
+          git add -A; git commit -qm "build of ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" builds
+
       - uses: actions/upload-artifact@v4
+        continue-on-error: true   # artifact storage quota can be full; the builds branch has the binary
         with:
           name: exult-3ds-${{ github.sha }}
           path: dist/
