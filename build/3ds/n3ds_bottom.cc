@@ -92,6 +92,31 @@ static void lefty_set(bool on) {
 	}
 }
 
+// Left-handed mode swaps the D-Pad and A/B/X/Y: hint text names the button the player presses.
+static const char* lh(const char* s) {
+	static const char* const sw[][2] = {
+		{"D-Pad left/right: pages.  B: close.", "X / A: pages.  D-Down: close."},
+		{"A click/drag   B walk to cursor", "Right click/drag  Down walk to cursor"},
+		{"X use/talk     Y inventory", "Left use/talk   Up inventory"},
+		{"D-Pad: up map, down stats,", "Y map, B stats,"},
+		{"left/right next person or item", "X / A next person or item"},
+		{"L+R zoom  L+Y guide", "L+R zoom  L+Up guide"},
+		{"L+D-Pad: watch, pause, lockpick, food", "L+Y/B/X/A: watch, pause, lockpick, food"},
+		{"Hold L + D-Pad down to pause.", "Hold L + B to pause."},
+		{"L+Y opens the manual on this screen.", "L+Up opens the manual on this screen."},
+		{"You are here (blinking).  D-Pad up or B: close", "You are here (blinking).  Y or D-Down: close"},
+		{"Need a sextant to see where you are.  B: close", "Need a sextant to see where you are.  D-Down: close"},
+		{"D-Pad down or B: close", "B or D-Down: close"},
+		{"D-Pad < >  pages      B  close", "X / A  pages      D-Down  close"},
+		{"D-Pad: up/down scroll, left/right section.  B: close", "Y / B scroll, X / A section.  D-Down: close"},
+	};
+	if (!g_lefty_loaded) lefty_load();
+	if (!g_lefty || !s) return s;
+	for (const auto& p : sw)
+		if (!std::strcmp(s, p[0])) return p[1];
+	return s;
+}
+
 #ifndef N3DS_AUTOSAVE_MS
 #	define N3DS_AUTOSAVE_MS (15 * 60 * 1000)
 #endif
@@ -739,7 +764,7 @@ namespace {
 			target->fill8(on ? C_RED : C_TEXT, 9, 2, xx - 4, yy - 1 + 1);
 		}
 		target->fill8(C_BG, PW, 14, 0, H - 14);
-		text_centered(0, loc ? "You are here (blinking).  D-Pad up or B: close" : "Need a sextant to see where you are.  B: close",
+		text_centered(0, lh(loc ? "You are here (blinking).  D-Pad up or B: close" : "Need a sextant to see where you are.  B: close"),
 					  PW / 2, H - 13, PW - 8);
 	}
 
@@ -958,7 +983,7 @@ namespace {
 			}
 			y += 18;
 		}
-		draw_footer("D-Pad down or B: close");
+		draw_footer(lh("D-Pad down or B: close"));
 	}
 
 	// ---- Answer buttons on the touchscreen ----------------------------------
@@ -1088,8 +1113,8 @@ namespace {
 		target->fill8(C_TEXT, PW, PARTY_H, 0, 0);
 		target->fill8(C_PANEL_HI, PW - 4, PARTY_H - 4, 2, 2);
 		text(0, "TIP", 8, 8);
-		text_fit(0, tip_text[tip_active][0], 40, 8, PW - 46);
-		text_fit(0, tip_text[tip_active][1], 40, 24, PW - 46);
+		text_fit(0, lh(tip_text[tip_active][0]), 40, 8, PW - 46);
+		text_fit(0, lh(tip_text[tip_active][1]), 40, 24, PW - 46);
 	}
 
 	// ---- Guide (L+Y) -----------------------------------------------------------
@@ -1198,11 +1223,11 @@ namespace {
 			if (!l) {
 				break;
 			}
-			text_fit(0, l, tx, y, PW - tx - 4);
+			text_fit(0, lh(l), tx, y, PW - tx - 4);
 			y += 14;
 		}
 		target->fill8(C_PANEL, PW, 16, 0, H - 16);
-		text_centered(0, "D-Pad < >  pages      B  close", PW / 2, H - 14);
+		text_centered(0, lh("D-Pad < >  pages      B  close"), PW / 2, H - 14);
 	}
 
 	// ---- Manual (L+Y, or Manual in the menu) ----------------------------------
@@ -1391,7 +1416,7 @@ namespace {
 			target->fill8(C_EDGE, 3, th, PW - 5, ty);
 		}
 		target->fill8(C_PANEL, PW, 16, 0, H - 16);
-		text_centered(0, "D-Pad: up/down scroll, left/right section.  B: close", PW / 2, H - 14, PW - 8);
+		text_centered(0, lh("D-Pad: up/down scroll, left/right section.  B: close"), PW / 2, H - 14, PW - 8);
 	}
 
 	// ---- Menu pop-up -----------------------------------------------------------
