@@ -64,6 +64,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <sys/stat.h>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
@@ -1374,7 +1375,7 @@ namespace {
 	}
 
 	// ---- Menu pop-up -----------------------------------------------------------
-	enum { ID_CLOSE = 400, ID_PARTY = 410, ID_BTN = 430, ID_GUIDE = 460, ID_SWAP = 461, ID_MAP = 462, ID_STATS = 463 };
+	enum { ID_CLOSE = 400, ID_PARTY = 410, ID_BTN = 430, ID_GUIDE = 460, ID_SWAP = 461, ID_MAP = 462, ID_STATS = 463, ID_LEFTY = 464 };
 
 	struct MenuBtn {
 		int         icon;
@@ -1395,6 +1396,16 @@ namespace {
 
 	enum { ID_SEC = 500 };
 
+	void draw_lefty_button() {
+		if (!g_lefty_loaded) {
+			lefty_load();
+		}
+		const int bx = MP_X + 70, bw = MP_W - 70 - 66, by = MP_Y + 2;
+		panel(bx, by, bw, 22, g_lefty || pressed_id == ID_LEFTY);
+		text_centered(0, g_lefty ? "Left hand: on" : "Left hand: off", bx + bw / 2, by + 5, bw - 6);
+		mhits.push_back({bx, by, bw, 24, SDLK_UNKNOWN, SDL_KMOD_NONE, ID_LEFTY});
+	}
+
 	void draw_manual_menu() {
 		manual_load();
 		target->fill8(C_BG, GAME_W, H, 0, 0);
@@ -1404,6 +1415,7 @@ namespace {
 		panel(MP_X + MP_W - 58, MP_Y + 3, 54, 18, pressed_id == ID_CLOSE);
 		text_centered(0, "Close", MP_X + MP_W - 31, MP_Y + 5);
 		mhits.push_back({MP_X + MP_W - 62, MP_Y, 62, 26, SDLK_UNKNOWN, SDL_KMOD_NONE, ID_CLOSE});
+		draw_lefty_button();
 		const int n    = std::min(14, static_cast<int>(manual.size()));
 		const int rows = (n + 1) / 2;
 		const int gy = MP_Y + 26, bw = (MP_W - 8) / 2, bh = std::min(34, (MP_Y + MP_H - 4 - gy) / std::max(1, rows));
@@ -1433,6 +1445,7 @@ namespace {
 		panel(MP_X + MP_W - 58, MP_Y + 3, 54, 18, pressed_id == ID_CLOSE);
 		text_centered(0, "Close", MP_X + MP_W - 31, MP_Y + 8);
 		mhits.push_back({MP_X + MP_W - 62, MP_Y, 62, 26, SDLK_UNKNOWN, SDL_KMOD_NONE, ID_CLOSE});
+		draw_lefty_button();
 		// Party: tap a portrait for that member's inventory (Exult's keys 1-8).
 		const std::vector<Actor*> members = party_members(gwin);
 		const int                 slot    = (MP_W - 8) / 8;
@@ -1772,6 +1785,48 @@ extern "C" void N3DS_BottomView(int* sx, int* sy, int* sw, int* sh) {
 
 extern "C" void N3DS_CycleTarget(int dir) {
 	pending_cycle += dir;
+}
+
+// Left-handed play: the D-pad and the face buttons swap jobs (Y<->up, A<->right, B<->down, X<->left).
+// Persisted by a marker file, like the other port settings. Toggled from the Menu / Manual header.
+static bool g_lefty        = false;
+static bool g_lefty_loaded = false;
+static void lefty_load() {
+	struct stat sb;
+	g_lefty        = ::stat("sdmc:/3ds/exult/.lefty", &sb) == 0;
+	g_lefty_loaded = true;
+}
+static void lefty_set(bool on) {
+	g_lefty = on;
+	if (on) {
+		if (FILE* f = std::fopen("sdmc:/3ds/exult/.lefty", "w")) {
+			std::fclose(f);
+		}
+	} else {
+		std::remove("sdmc:/3ds/exult/.lefty");
+	}
+}
+extern "C" u32 N3DS_Remap(u32 m) {
+	static const u32 pr[4][2] = {{KEY_Y, KEY_DUP}, {KEY_A, KEY_DRIGHT}, {KEY_B, KEY_DDOWN}, {KEY_X, KEY_DLEFT}};
+	if (!g_lefty_loaded) {
+		lefty_load();
+	}
+	if (!g_lefty) {
+		return m;
+	}
+	u32 r = m;
+	for (auto& p : pr) {
+		r &= ~(p[0] | p[1]);
+	}
+	for (auto& p : pr) {
+		if (m & p[0]) {
+			r |= p[1];
+		}
+		if (m & p[1]) {
+			r |= p[0];
+		}
+	}
+	return r;
 }
 
 // Buttons taken for the layout's own UI.
@@ -2129,6 +2184,17 @@ extern "C" int N3DS_BottomTouch(int phase, int x, int y, float* nx, float* ny) {
 					touch_hit     = -1;
 					touch_ui      = false;
 					overlay_dirty = true;
+					return 1;
+				}
+				if (h.id == ID_LEFTY) {    // stays open: just flips the setting
+					lefty_set(!g_lefty);
+					click3ds::play();
+					pressed_id    = -1;
+					touch_hit     = -1;
+					touch_ui      = false;
+					menu_dirty    = true;
+					overlay_dirty = true;
+					last_draw     = 0;
 					return 1;
 				}
 				if (h.id == ID_CLOSE && help_page >= 0) {

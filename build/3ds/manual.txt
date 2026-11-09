@@ -84,6 +84,7 @@ The three bars in the top-right corner of the touchscreen open the menu.
 | Manual | This manual.
 | Swap screens | Put the game on the top screen (for 3D) or back.
 | Game menu | Exult's menu: save, load, options, quit.
+| Left hand | The button at the top of the menu: swaps the D-pad with Y, A, B and X (Y is up, A is right, B is down, X is left, and the reverse), so the stylus can be held in the left hand. It is remembered.
 
 Tap outside it, or press B, to close it.
 

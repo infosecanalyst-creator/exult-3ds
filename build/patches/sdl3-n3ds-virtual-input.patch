@@ -346,7 +346,7 @@ new file mode 100644
 index 0000000..1b44ae7
 --- /dev/null
 +++ b/src/video/n3ds/SDL_n3dsvinput.c
-@@ -0,0 +1,290 @@
+@@ -0,0 +1,296 @@
 +/* SPDX-License-Identifier: GPL-2.0-or-later */
 +/* Copyright (C) 2026 the exult-3ds authors */
 +/*
@@ -435,6 +435,12 @@ index 0000000..1b44ae7
 +}
 +static Uint32 l_layer_used = 0;
 +
++/* Lets the app remap the pad (left-handed play swaps the D-pad and A/B/X/Y). */
++__attribute__((weak)) u32 N3DS_Remap(u32 keys)
++{
++    return keys;
++}
++
 +/* Lets the app take buttons for its own UI (e.g. paging a guide). Returns the
 +   buttons it consumed from kDown; those are not turned into game input. */
 +__attribute__((weak)) u32 N3DS_KeyHook(u32 kDown, u32 kHeld)
@@ -512,9 +518,9 @@ index 0000000..1b44ae7
 +        return;
 +    }
 +
-+    kDown = hidKeysDown();
-+    kUp   = hidKeysUp();
-+    kHeld = hidKeysHeld();
++    kDown = N3DS_Remap(hidKeysDown());
++    kUp   = N3DS_Remap(hidKeysUp());
++    kHeld = N3DS_Remap(hidKeysHeld());
 +    layer = (kHeld & KEY_L) != 0;
 +    {
 +        const u32 taken = N3DS_KeyHook(kDown, kHeld);
