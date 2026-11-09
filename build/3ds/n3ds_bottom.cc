@@ -72,6 +72,26 @@
 #include <unordered_map>
 #include <vector>
 
+// Left-handed play: the D-pad and the face buttons swap jobs (Y<->up, A<->right, B<->down, X<->left).
+// Persisted by a marker file, like the other port settings. Toggled from the Menu / Manual header.
+static bool g_lefty        = false;
+static bool g_lefty_loaded = false;
+static void lefty_load() {
+	struct stat sb;
+	g_lefty        = ::stat("sdmc:/3ds/exult/.lefty", &sb) == 0;
+	g_lefty_loaded = true;
+}
+static void lefty_set(bool on) {
+	g_lefty = on;
+	if (on) {
+		if (FILE* f = std::fopen("sdmc:/3ds/exult/.lefty", "w")) {
+			std::fclose(f);
+		}
+	} else {
+		std::remove("sdmc:/3ds/exult/.lefty");
+	}
+}
+
 #ifndef N3DS_AUTOSAVE_MS
 #	define N3DS_AUTOSAVE_MS (15 * 60 * 1000)
 #endif
@@ -1787,25 +1807,6 @@ extern "C" void N3DS_CycleTarget(int dir) {
 	pending_cycle += dir;
 }
 
-// Left-handed play: the D-pad and the face buttons swap jobs (Y<->up, A<->right, B<->down, X<->left).
-// Persisted by a marker file, like the other port settings. Toggled from the Menu / Manual header.
-static bool g_lefty        = false;
-static bool g_lefty_loaded = false;
-static void lefty_load() {
-	struct stat sb;
-	g_lefty        = ::stat("sdmc:/3ds/exult/.lefty", &sb) == 0;
-	g_lefty_loaded = true;
-}
-static void lefty_set(bool on) {
-	g_lefty = on;
-	if (on) {
-		if (FILE* f = std::fopen("sdmc:/3ds/exult/.lefty", "w")) {
-			std::fclose(f);
-		}
-	} else {
-		std::remove("sdmc:/3ds/exult/.lefty");
-	}
-}
 extern "C" u32 N3DS_Remap(u32 m) {
 	static const u32 pr[4][2] = {{KEY_Y, KEY_DUP}, {KEY_A, KEY_DRIGHT}, {KEY_B, KEY_DDOWN}, {KEY_X, KEY_DLEFT}};
 	if (!g_lefty_loaded) {
