@@ -172,7 +172,7 @@ namespace {
 	unsigned char    C_BG, C_PANEL, C_PANEL_HI, C_EDGE, C_RED, C_BLUE, C_GREEN, C_DIM, C_TEXT, C_YELLOW;
 
 	// Menu button: top-right corner of the bottom screen.
-	constexpr int MB_X = GAME_W - 30, MB_Y = 2, MB_W = 28, MB_H = 22;
+	constexpr int MB_X = GAME_W - 34, MB_Y = 6, MB_W = 28, MB_H = 24;    // UI rule 11: 24 px tall, 6 px from the edges
 	constexpr int ID_MENU_BUTTON = 399;
 
 	// Zoom (L+R): the touchscreen shows a smaller part of the game, enlarged.
@@ -492,7 +492,7 @@ namespace {
 		target->fill8(hi ? C_TEXT : C_EDGE, MB_W, MB_H, MB_X, MB_Y);
 		target->fill8(C_BG, MB_W - 2, MB_H - 2, MB_X + 1, MB_Y + 1);
 		for (int k = 0; k < 3; k++) {
-			target->fill8(C_TEXT, MB_W - 14, 2, MB_X + 7, MB_Y + 6 + k * 4);
+			target->fill8(C_TEXT, MB_W - 14, 2, MB_X + 7, MB_Y + 7 + k * 4);
 		}
 	}
 
@@ -1002,16 +1002,16 @@ namespace {
 			const int first = answer_page * perpage;
 			const int shown = std::min(perpage, n - first) + (n > perpage ? 1 : 0);
 			const int rows  = (shown + 1) / 2;
-			const int bh = 28, bw = GAME_W / 2 - 6;
-			cb_y0 = H - (rows * (bh + 2) + 6);
+			const int bh = 26, bw = GAME_W / 2 - 8;    // UI rule 11: 24+ px, 4+ px apart, 6 px from the edges
+			cb_y0 = H - (rows * (bh + 4) + 6);
 			target->fill8(C_EDGE, GAME_W, H - cb_y0, 0, cb_y0);
 			target->fill8(C_BG, GAME_W, H - cb_y0 - 1, 0, cb_y0 + 1);
 			for (int k = 0; k < shown; k++) {
 				const bool more = n > perpage && k == shown - 1;
 				const int  i    = more ? -1 : first + k;
-				const int  bx = 4 + (k % 2) * (GAME_W / 2), by = cb_y0 + 4 + (k / 2) * (bh + 2);
+				const int  bx = 6 + (k % 2) * (GAME_W / 2), by = cb_y0 + 4 + (k / 2) * (bh + 4);
 				panel(bx, by, bw, bh, cpressed == i);
-				text_centered(0, more ? "More..." : conv->get_answer(i), bx + bw / 2, by + 8, bw - 8);
+				text_centered(0, more ? "More..." : conv->get_answer(i), bx + bw / 2, by + 7, bw - 8);
 				chits.push_back({bx, by, bw, bh, i});
 			}
 		} else if (cb_mode == 2) {
@@ -1446,8 +1446,8 @@ namespace {
 			lefty_load();
 		}
 		const int bx = MP_X + 70, bw = MP_W - 70 - 66, by = MP_Y + 2;
-		panel(bx, by, bw, 22, g_lefty || pressed_id == ID_LEFTY);
-		text_centered(0, g_lefty ? "Left hand: on" : "Left hand: off", bx + bw / 2, by + 5, bw - 6);
+		panel(bx, by, bw, 24, g_lefty || pressed_id == ID_LEFTY);
+		text_centered(0, g_lefty ? "Left hand: on" : "Left hand: off", bx + bw / 2, by + 7, bw - 6);
 		mhits.push_back({bx, by, bw, 24, SDLK_UNKNOWN, SDL_KMOD_NONE, ID_LEFTY});
 	}
 
@@ -1456,18 +1456,18 @@ namespace {
 		target->fill8(C_BG, GAME_W, H, 0, 0);
 		panel(MP_X, MP_Y, MP_W, MP_H, false);
 		target->fill8(C_BG, MP_W - 4, MP_H - 4, MP_X + 2, MP_Y + 2);
-		text(0, "Manual", MP_X + 8, MP_Y + 6);
-		panel(MP_X + MP_W - 58, MP_Y + 3, 54, 18, pressed_id == ID_CLOSE);
-		text_centered(0, "Close", MP_X + MP_W - 31, MP_Y + 5);
-		mhits.push_back({MP_X + MP_W - 62, MP_Y, 62, 26, SDLK_UNKNOWN, SDL_KMOD_NONE, ID_CLOSE});
+		text(0, "Manual", MP_X + 8, MP_Y + 9);
+		panel(MP_X + MP_W - 58, MP_Y + 2, 54, 24, pressed_id == ID_CLOSE);
+		text_centered(0, "Close", MP_X + MP_W - 31, MP_Y + 9);
+		mhits.push_back({MP_X + MP_W - 60, MP_Y, 60, 28, SDLK_UNKNOWN, SDL_KMOD_NONE, ID_CLOSE});
 		draw_lefty_button();
 		const int n    = std::min(14, static_cast<int>(manual.size()));
 		const int rows = (n + 1) / 2;
-		const int gy = MP_Y + 26, bw = (MP_W - 8) / 2, bh = std::min(34, (MP_Y + MP_H - 4 - gy) / std::max(1, rows));
+		const int gy = MP_Y + 28, bw = (MP_W - 8) / 2, bh = std::min(34, (MP_Y + MP_H - 4 - gy) / std::max(1, rows));    // rule 11: bh - 4 >= 24, 4 px gaps
 		for (int i = 0; i < n; i++) {
 			const int bx = MP_X + 4 + (i % 2) * bw, by = gy + (i / 2) * bh;
 			const int id = ID_SEC + i;
-			panel(bx + 1, by + 1, bw - 2, bh - 2, i == help_page || pressed_id == id);
+			panel(bx + 2, by + 2, bw - 4, bh - 4, i == help_page || pressed_id == id);
 			text_centered(0, manual[i].title.c_str(), bx + bw / 2, by + bh / 2 - 6, bw - 8);
 			mhits.push_back({bx, by, bw, bh, SDLK_UNKNOWN, SDL_KMOD_NONE, id});
 		}
@@ -1486,31 +1486,31 @@ namespace {
 		target->fill8(C_BG, GAME_W, H, 0, 0);
 		panel(MP_X, MP_Y, MP_W, MP_H, false);
 		target->fill8(C_BG, MP_W - 4, MP_H - 4, MP_X + 2, MP_Y + 2);
-		text(0, "Menu", MP_X + 8, MP_Y + 6);
-		panel(MP_X + MP_W - 58, MP_Y + 3, 54, 18, pressed_id == ID_CLOSE);
-		text_centered(0, "Close", MP_X + MP_W - 31, MP_Y + 8);
-		mhits.push_back({MP_X + MP_W - 62, MP_Y, 62, 26, SDLK_UNKNOWN, SDL_KMOD_NONE, ID_CLOSE});
+		text(0, "Menu", MP_X + 8, MP_Y + 9);
+		panel(MP_X + MP_W - 58, MP_Y + 2, 54, 24, pressed_id == ID_CLOSE);
+		text_centered(0, "Close", MP_X + MP_W - 31, MP_Y + 9);
+		mhits.push_back({MP_X + MP_W - 60, MP_Y, 60, 28, SDLK_UNKNOWN, SDL_KMOD_NONE, ID_CLOSE});
 		draw_lefty_button();
 		// Party: tap a portrait for that member's inventory (Exult's keys 1-8).
 		const std::vector<Actor*> members = party_members(gwin);
 		const int                 slot    = (MP_W - 8) / 8;
 		for (size_t i = 0; i < members.size(); i++) {
-			const int x  = MP_X + 4 + static_cast<int>(i) * slot, y = MP_Y + 26;
+			const int x  = MP_X + 4 + static_cast<int>(i) * slot + 2, y = MP_Y + 30;
 			const int id = ID_PARTY + static_cast<int>(i);
-			panel(x, y, slot - 2, 44, pressed_id == id);
-			draw_face(members[i], x + 1, y + 1, slot - 4, 34);
-			bar(x + 3, y + 38, slot - 8, members[i]->get_effective_prop(Actor::health),
+			panel(x, y, slot - 4, 44, pressed_id == id);
+			draw_face(members[i], x + 1, y + 1, slot - 6, 34);
+			bar(x + 3, y + 38, slot - 10, members[i]->get_effective_prop(Actor::health),
 				members[i]->get_effective_prop(Actor::strength), C_RED);
-			mhits.push_back({x, y, slot - 2, 44, static_cast<SDL_Keycode>(SDLK_1 + i), SDL_KMOD_NONE, id});
+			mhits.push_back({x - 2, y, slot, 44, static_cast<SDL_Keycode>(SDLK_1 + i), SDL_KMOD_NONE, id});
 		}
 		// Commands: 3 x 4 grid.
-		const int gy = MP_Y + 74, bw = (MP_W - 8) / 3, bh = (MP_Y + MP_H - 4 - gy) / 4;
+		const int gy = MP_Y + 76, bw = (MP_W - 8) / 3, bh = (MP_Y + MP_H - 4 - gy) / 4;    // rule 11: 4 px gaps
 		for (int i = 0; i < 12; i++) {
 			const MenuBtn& b  = menu_btns[i];
 			const int      bx = MP_X + 4 + (i % 3) * bw, by = gy + (i / 3) * bh;
 			const int      id = b.id ? b.id : ID_BTN + i;
 			const bool     on = (b.key == SDLK_C && gwin->in_combat()) || (b.id == ID_SWAP && game_on_top);
-			panel(bx + 1, by + 1, bw - 2, bh - 2, on || pressed_id == id);
+			panel(bx + 2, by + 2, bw - 4, bh - 4, on || pressed_id == id);
 			if (b.icon >= 0) {
 				Shape_frame* ic = sb_icon(b.icon);
 				const int    iw = ic ? std::min(ic->get_width(), 30) : 0;
@@ -1802,7 +1802,7 @@ extern "C" void N3DS_BottomOverlay(void* fbp, int fbw, int fbh) {
 			uint32_t&  d    = *(col - y);
 			const int  ry   = y - MB_Y;
 			const bool edge = x == MB_X || x == MB_X + MB_W - 1 || y == MB_Y || y == MB_Y + MB_H - 1;
-			const bool bars = x >= MB_X + 7 && x < MB_X + MB_W - 7 && ry >= 6 && ry < 16 && (ry - 6) % 4 < 2;
+			const bool bars = x >= MB_X + 7 && x < MB_X + MB_W - 7 && ry >= 7 && ry < 17 && (ry - 7) % 4 < 2;
 			if (bars || edge) {
 				d = pressed ? 0xF0D060FF : 0xE6E6E6FF;
 			} else {
