@@ -343,10 +343,10 @@ index dd54a4c..ec9dd04 100644
  bool N3DS_StopTextInput(SDL_VideoDevice *_this, SDL_Window *window)
 diff --git a/src/video/n3ds/SDL_n3dsvinput.c b/src/video/n3ds/SDL_n3dsvinput.c
 new file mode 100644
-index 0000000..1b44ae7
+index 0000000..b843256
 --- /dev/null
 +++ b/src/video/n3ds/SDL_n3dsvinput.c
-@@ -0,0 +1,296 @@
+@@ -0,0 +1,329 @@
 +/* SPDX-License-Identifier: GPL-2.0-or-later */
 +/* Copyright (C) 2026 the exult-3ds authors */
 +/*
@@ -400,6 +400,9 @@ index 0000000..1b44ae7
 +static bool  touch_active = false;
 +static bool  touch_consumed = false;
 +static int   last_px = 0, last_py = 0;
++static bool  pad_mode = false;
++static Uint64 pad_start = 0;
++static int   pad_moved = 0;
 +
 +static SDL_Window *TopWindow(void);
 +static void ClampCursor(SDL_Window *win);
@@ -425,7 +428,8 @@ index 0000000..1b44ae7
 +
 +/* Default: whole bottom screen is a touchpad. Exult-3DS overrides this.
 +   Return 0 = move the cursor to nx/ny, 1 = touch belongs to the app's UI,
-+   2 = keep the button down but leave the cursor where the app put it. */
++   2 = keep the button down but leave the cursor where the app put it,
++   3 = touchpad: slide moves the cursor relative, a short tap clicks. */
 +__attribute__((weak)) int N3DS_BottomTouch(int phase, int x, int y, float *nx, float *ny)
 +{
 +    (void)phase;
@@ -540,6 +544,26 @@ index 0000000..1b44ae7
 +        if (!touch_active) {
 +            touch_active = true;
 +            touch_consumed = consumed == 1;
++            pad_mode = consumed == 3;
++            pad_start = SDL_GetTicks();
++            pad_moved = 0;
++        }
++        if (pad_mode) {
++            /* Touchpad (game on the top screen): slide moves the cursor
++               relative to where it is, a short tap clicks there. */
++            if (phase == 1) {
++                const int dx = touch.px - last_px, dy = touch.py - last_py;
++                pad_moved += SDL_abs(dx) + SDL_abs(dy);
++                if (dx || dy) {
++                    cursor_x += dx * win->w / (float)BOTTOM_W;
++                    cursor_y += dy * win->h / (float)BOTTOM_H;
++                    ClampCursor(win);
++                    SDL_SendMouseMotion(0, win, VIN_MOUSE_ID, false, cursor_x, cursor_y);
++                }
++            }
++            last_px = touch.px;
++            last_py = touch.py;
++            goto touch_done;
 +        }
 +        last_px = touch.px;
 +        last_py = touch.py;
@@ -560,6 +584,14 @@ index 0000000..1b44ae7
 +                SDL_SendMouseButton(0, win, VIN_MOUSE_ID, SDL_BUTTON_LEFT, true);
 +            }
 +        }
++    } else if (touch_active && pad_mode) {
++        if (pad_moved < 6 && SDL_GetTicks() - pad_start < 350) {
++            SDL_SendMouseButton(0, win, VIN_MOUSE_ID, SDL_BUTTON_LEFT, true);
++            SDL_SendMouseButton(0, win, VIN_MOUSE_ID, SDL_BUTTON_LEFT, false);
++        }
++        pad_mode = false;
++        touch_active = false;
++        touch_frames = 0;
 +    } else if (touch_active) {
 +        float nx = 0, ny = 0;
 +        N3DS_BottomTouch(2, last_px, last_py, &nx, &ny);
@@ -578,6 +610,7 @@ index 0000000..1b44ae7
 +        touch_consumed = false;
 +    }
 +
++touch_done:
 +    /* --- C-Stick: relative cursor with simple acceleration --- */
 +    hidCstickRead(&cstick);
 +    if (cstick.dx * cstick.dx + cstick.dy * cstick.dy > 15 * 15) {

@@ -14,8 +14,8 @@
  * A small menu button (three bars) in the game's top-right corner opens a
  * pop-up with the party's inventories and the rest of the commands.
  * L+START swaps the screens: the game goes back to the top screen (where the
- * 3D slider works) and the dashboard moves to the bottom screen, whose
- * touches then point and click 1:1 on the game above. L+Y opens a guide.
+ * 3D slider works) and the dashboard moves to the bottom screen, which
+ * then works as a touchpad: slide to move the cursor, tap to click. L+Y opens a guide.
  *
  * The dashboard is drawn with Exult's own shapes, fonts and palette into an
  * 8-bit buffer and converted to an RGB565 framebuffer a few times a second.
@@ -1751,6 +1751,10 @@ extern "C" int N3DS_GameScreen(void) {
 // Keep the C-Stick cursor on the visible game area.
 extern "C" void N3DS_ClampCursor(float* x, float* y) {
 	(void)y;
+	if (game_on_top) {
+		*x = std::clamp(*x, 0.0f, static_cast<float>(WIN_W - 1));    // the whole 400-wide game is on top
+		return;
+	}
 	*x = std::clamp(*x, static_cast<float>(XOFF), static_cast<float>(XOFF + GAME_W - 1));
 }
 
@@ -2135,6 +2139,9 @@ void n3ds_bottom_tick() {
 // The touchscreen shows the game 1:1 (or, swapped, sits under it 1:1).
 extern "C" int N3DS_BottomTouch(int phase, int x, int y, float* nx, float* ny) {
 	auto to_game = [&]() {
+		if (game_on_top) {
+			return 3;    // UI rule 7: the touchscreen is a touchpad for the cursor on top
+		}
 		const int cx = std::clamp(x, 0, GAME_W - 1), cy = std::clamp(y, 0, H - 1);
 		const float gx = game_on_top ? cx : view_x + (cx + 0.5f) * view_w / GAME_W;
 		const float gy = game_on_top ? cy : view_y + (cy + 0.5f) * view_h / H;

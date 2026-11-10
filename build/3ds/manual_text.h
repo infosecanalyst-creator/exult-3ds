@@ -106,7 +106,7 @@ Signs, plaques and gravestones keep their rune lettering, with the same words in
 L+R zooms the touchscreen to 1.5x, then 2x, then back. The view follows the Avatar and taps still land where you touch. The top screen shows ZOOM while it is on.
 
 ## Swapping the screens
-ZL (or Swap screens in the menu, or L+START) puts the game back on the top screen and the dashboard on the touchscreen. Touches then point and click on the game above, at the same spot. Press ZL again to swap back.
+ZL (or Swap screens in the menu, or L+START) puts the game back on the top screen and the dashboard on the touchscreen. The game fills the top screen and the touchscreen becomes a touchpad: slide to move the pointer, tap to click where it points (the menu button in the corner still works). B is the right button. Press ZL again to swap back.
 
 ## 3D
 3D works when the game is on the top screen: swap the screens, then push the 3D slider up. Roofs, trees and people rise out of the screen; windows and text stay flat.
