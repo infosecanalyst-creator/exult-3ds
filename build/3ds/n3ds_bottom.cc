@@ -258,6 +258,32 @@ namespace {
 	// ---- Screens --------------------------------------------------------------
 	// Game on the bottom: bottom = 32-bit double-buffered (SDL), top = RGB565
 	// single-buffered (dashboard). Swapped: the other way round.
+	// Where the game area starts in the 400-wide window: the middle 320 when the
+	// game is on the touchscreen, the whole window when it is on the top screen.
+	int cur_xoff() {
+		return game_on_top ? 0 : XOFF;
+	}
+
+	// UI rule 8: a swapped game fills the top screen. Exult draws a 400-wide
+	// game area on top (more of the world, no stretching) and the 320-wide one
+	// that fits the touchscreen otherwise.
+	void fit_game_area(Game_window* gwin) {
+		auto*         w  = gwin->get_win();
+		const int     gw = game_on_top ? WIN_W : GAME_W;
+		if (!w || w->get_game_width() == gw) {
+			return;
+		}
+		w->resized(WIN_W, H, w->is_fullscreen(), gw, H, w->get_scale_factor(), w->get_scaler(), w->get_fill_mode(),
+				   w->get_fill_scaler());
+		gwin->get_pal()->apply(false);
+		Shape_frame::set_to_render(w->get_ib8());
+		if (gwin->get_main_actor()) {
+			gwin->center_view(gwin->get_main_actor()->get_tile());
+		}
+		gwin->set_all_dirty();
+		std::printf("[exult-3ds] game area %dx%d\n", gw, H);
+	}
+
 	void apply_layout() {
 		const gfxScreen_t game  = game_on_top ? GFX_TOP : GFX_BOTTOM;
 		const gfxScreen_t panel = game_on_top ? GFX_BOTTOM : GFX_TOP;
@@ -1416,7 +1442,7 @@ namespace {
 			target->fill8(C_EDGE, 3, th, PW - 5, ty);
 		}
 		target->fill8(C_PANEL, PW, 16, 0, H - 16);
-		text_centered(0, lh("D-Pad: up/down scroll, left/right section.  B: close"), PW / 2, H - 14, PW - 8);
+		text_centered(0, lh("Sticks: scroll.  D-Pad: pick a section.  L/R: section.  B: close"), PW / 2, H - 14, PW - 8);
 	}
 
 	// ---- Menu pop-up -----------------------------------------------------------
@@ -1650,7 +1676,7 @@ namespace {
 		const int n = static_cast<int>(list.size());
 		idx         = idx < 0 ? (dir > 0 ? 0 : n - 1) : ((idx + dir) % n + n) % n;
 		last_target = list[idx].obj;
-		N3DS_SetCursor(static_cast<float>(list[idx].cx + XOFF), static_cast<float>(list[idx].cy));
+		N3DS_SetCursor(static_cast<float>(list[idx].cx + cur_xoff()), static_cast<float>(list[idx].cy));
 		last_draw = 0;
 	}
 }    // namespace
@@ -1832,6 +1858,11 @@ extern "C" void N3DS_BottomView(int* sx, int* sy, int* sw, int* sh) {
 	*sh = view_h;
 }
 
+// While the manual is open the sticks scroll it: the game sees them centred.
+extern "C" int N3DS_SticksBlocked(void) {
+	return in_game && help_page >= 0;
+}
+
 extern "C" void N3DS_CycleTarget(int dir) {
 	pending_cycle += dir;
 }
@@ -1900,25 +1931,58 @@ extern "C" u32 N3DS_KeyHook(u32 kDown, u32 kHeld) {
 		open_guide(help_page < 0);
 		taken |= KEY_Y;
 	}
-	if (help_page >= 0 && !l) {
+	if (help_page >= 0) {
+		// The standard reading controls (same in every 3DS port):
+		//   scroll: Circle Pad or C-Stick up/down (hold to keep going; the
+		//   sticks don't move the game meanwhile); the D-Pad moves between the
+		//   section buttons; L/R previous/next section; close: B or START.
 		manual_load();
-		const int n = static_cast<int>(manual.size());
+		const int  n    = static_cast<int>(manual.size());
+		const u32  UP   = KEY_CPAD_UP | KEY_CSTICK_UP;
+		const u32  DOWN = KEY_CPAD_DOWN | KEY_CSTICK_DOWN;
+		static u64 hold_since = 0, last_step = 0;
+		const u64  now        = SDL_GetTicks();
+		const int  dir        = (kHeld & UP) ? -1 : (kHeld & DOWN) ? 1 : 0;
+		if (kDown & (UP | DOWN)) {
+			manual_scroll_by(dir);
+			hold_since = last_step = now;
+		} else if (dir != 0 && now - hold_since > 250 && now - last_step > 60) {
+			manual_scroll_by(dir);
+			last_step = now;
+		}
+		// D-Pad: move through the two-column grid of section buttons.
+		int step = 0;
+		if (kDown & KEY_DLEFT) {
+			step = -1;
+		}
+		if (kDown & KEY_DRIGHT) {
+			step = 1;
+		}
 		if (kDown & KEY_DUP) {
-			manual_scroll_by(-3);
+			step = -2;
 		}
 		if (kDown & KEY_DDOWN) {
-			manual_scroll_by(3);
+			step = 2;
 		}
-		if (kDown & (KEY_DLEFT | KEY_DRIGHT)) {
-			help_page     = std::clamp(help_page + ((kDown & KEY_DRIGHT) ? 1 : -1), 0, n - 1);
-			manual_scroll = 0;
-			menu_dirty    = true;
+		if (kDown & (l && !(kDown & KEY_Y) ? KEY_L : 0)) {
+			step = -1;
+		}
+		if (kDown & KEY_R) {
+			step = 1;
+		}
+		if (step != 0) {
+			const int np = help_page + step;
+			if (np >= 0 && np < n) {
+				help_page     = np;
+				manual_scroll = 0;
+				menu_dirty    = true;
+			}
 		}
 		if (kDown & (KEY_B | KEY_START)) {
 			open_guide(false);
 		}
 		last_draw = 0;
-		taken |= kDown & (KEY_DUP | KEY_DDOWN | KEY_DLEFT | KEY_DRIGHT | KEY_B | KEY_START);
+		taken |= kDown & (KEY_DUP | KEY_DDOWN | KEY_DLEFT | KEY_DRIGHT | KEY_B | KEY_START | KEY_R | KEY_L);
 	} else if (menu_open && (kDown & (KEY_B | KEY_START))) {
 		set_menu(false);
 		taken |= kDown & (KEY_B | KEY_START);
@@ -1970,6 +2034,7 @@ void n3ds_bottom_tick() {
 		pending_swap = false;
 		game_on_top  = !game_on_top;
 		std::printf("[exult-3ds] game on the %s screen\n", game_on_top ? "top" : "bottom");
+		fit_game_area(gwin);
 		gwin->set_all_dirty();
 		apply_layout();
 	} else if (!layout_ok()) {
@@ -1984,8 +2049,7 @@ void n3ds_bottom_tick() {
 				n3ds_sd_report(wr, sizeof wr);
 				std::printf("[exult-3ds] %s\n", wr);
 			}
-			n3ds_log_flush();
-			last_flush = now;
+			last_flush = now;    // the log itself is written by its background thread
 		}
 	}
 	if (pending_map) {
@@ -2145,7 +2209,7 @@ extern "C" int N3DS_BottomTouch(int phase, int x, int y, float* nx, float* ny) {
 		const int cx = std::clamp(x, 0, GAME_W - 1), cy = std::clamp(y, 0, H - 1);
 		const float gx = game_on_top ? cx : view_x + (cx + 0.5f) * view_w / GAME_W;
 		const float gy = game_on_top ? cy : view_y + (cy + 0.5f) * view_h / H;
-		*nx = (gx + XOFF) / WIN_W;
+		*nx = (gx + cur_xoff()) / WIN_W;
 		*ny = gy / H;
 		return 0;
 	};

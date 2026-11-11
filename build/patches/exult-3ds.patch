@@ -1,10 +1,3 @@
-# exult-3ds.patch -- Modified for exult-3ds, 2026-10.
-# Changes to Exult (https://github.com/exult/exult, commit in EXULT_COMMIT)
-# for the Nintendo 3DS port. Exult is copyright the Exult Team and is
-# licensed GPL-2.0-or-later; these changes are by the exult-3ds authors
-# under the same licence. Each modified file also gets a one-line notice.
-# SPDX-License-Identifier: GPL-2.0-or-later
-#
 diff --git a/audio/midi_drivers/LowLevelMidiDriver.cpp b/audio/midi_drivers/LowLevelMidiDriver.cpp
 index aadd4f4..ff2ebc3 100644
 --- a/audio/midi_drivers/LowLevelMidiDriver.cpp
@@ -61,7 +54,7 @@ index 5142fb6..e224b24 100644
  			std::make_unique<Text_effect>(msg, gwin->get_scrolltx() + x / c_tilesize, gwin->get_scrollty() + y / c_tilesize, gwin));
  }
 diff --git a/exult.cc b/exult.cc
-index 4ba1584..5671038 100644
+index 4ba1584..22e1de7 100644
 --- a/exult.cc
 +++ b/exult.cc
 @@ -1,3 +1,4 @@
@@ -69,19 +62,20 @@ index 4ba1584..5671038 100644
  /**
   ** Exult.cc - Multiplatform Ultima 7 game engine
   **
-@@ -22,6 +23,11 @@
+@@ -22,6 +23,12 @@
   *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
   */
  
 +#ifdef N3DS_PORT
 +extern "C" void n3ds_after_sdl_init();
++extern "C" int  n3ds_frontend_game_choice();    // 3ds/n3ds_frontend.cc
 +class TouchUI;
 +TouchUI* n3ds_create_touchui();
 +#endif
  #ifdef HAVE_CONFIG_H
  #	include <config.h>
  #endif
-@@ -250,6 +256,7 @@ int main(int argc, char* argv[]) {
+@@ -250,6 +257,7 @@ int main(int argc, char* argv[]) {
  	// cross-platform support.  Standalone utilities continue to default
  	// to the default std::fstream-based file I/O to avoid taking an SDL
  	// dependency.
@@ -89,7 +83,7 @@ index 4ba1584..5671038 100644
  	U7set_istream_factory([](const char* s, std::ios_base::openmode mode) -> std::unique_ptr<std::istream> {
  		auto file = std::make_unique<std::ifstream>(s, mode);
  		if (file->good()) {
-@@ -264,6 +271,7 @@ int main(int argc, char* argv[]) {
+@@ -264,6 +272,7 @@ int main(int argc, char* argv[]) {
  		}
  		return std::make_unique<SdlRwopsOstream>(s, mode);
  	});
@@ -97,7 +91,7 @@ index 4ba1584..5671038 100644
  #ifdef SDL_PLATFORM_IOS
  	const char* launchFlag = iOS_GetLaunchGameFlag();
  
-@@ -579,7 +587,9 @@ int exult_main(const char* runpath) {
+@@ -579,7 +588,9 @@ int exult_main(const char* runpath) {
  	std::cout << std::endl;
  
  	// Check CRCs of our .flx files
@@ -108,7 +102,7 @@ index 4ba1584..5671038 100644
  	const char*  flexname = BUNDLE_CHECK(BUNDLE_EXULT_FLX, EXULT_FLX);
  	const uint32 crc      = crc32(flexname);
  	if (crc != EXULT_FLX_CRC32) {
-@@ -596,6 +606,8 @@ int exult_main(const char* runpath) {
+@@ -596,6 +607,8 @@ int exult_main(const char* runpath) {
  		crc_ok = false;
  		cerr << "exult_si.flx has a wrong checksum!" << endl;
  	}
@@ -117,7 +111,7 @@ index 4ba1584..5671038 100644
  
  	bool config_ignore_crc;
  	config->value("config/disk/no_crc", config_ignore_crc);
-@@ -663,6 +675,8 @@ int exult_main(const char* runpath) {
+@@ -663,6 +676,8 @@ int exult_main(const char* runpath) {
  	touchui = new TouchUI_iOS();
  #elif defined(ANDROID)
  	touchui = new TouchUI_Android();
@@ -126,7 +120,7 @@ index 4ba1584..5671038 100644
  #endif
  	Init();    // Create main window.
  
-@@ -798,6 +812,9 @@ static void Init() {
+@@ -798,6 +813,9 @@ static void Init() {
  		exit(-1);
  	}
  	std::atexit(SDL_Quit);
@@ -136,6 +130,27 @@ index 4ba1584..5671038 100644
  
  	// KBD repeat should be nice.
  	SDL_HideCursor();
+@@ -976,6 +994,20 @@ static void Init() {
+ 
+ 			exit(error);
+ 		}
++#endif
++#ifdef N3DS_PORT
++		// The 3DS start screen already picked the game and how to start it.
++		if (!newgame) {
++			const int pick = n3ds_frontend_game_choice();
++			if (pick == 1) {
++				newgame = gamemanager->get_bg();
++			} else if (pick == 2) {
++				newgame = gamemanager->get_si();
++			}
++			if (newgame) {
++				arg_nomenu = true;
++			}
++		}
+ #endif
+ 		if (!newgame) {
+ 			ExultMenu exult_menu(gwin);
 diff --git a/exultmenu.cc b/exultmenu.cc
 index 7427b67..2188d5b 100644
 --- a/exultmenu.cc
@@ -234,7 +249,7 @@ index 7427b67..2188d5b 100644
  		auto*          entry    = new MenuGameEntry(fonton, font, exultmod.get_menu_string().c_str(), nullptr, menux, ypos);
  		entry->set_id(i);
 diff --git a/files/utils.cc b/files/utils.cc
-index 6f68316..2d95965 100644
+index 6f68316..c36221e 100644
 --- a/files/utils.cc
 +++ b/files/utils.cc
 @@ -1,3 +1,4 @@
@@ -266,7 +281,7 @@ index 6f68316..2d95965 100644
  using std::ios;
  using std::string;
  
-@@ -85,6 +96,239 @@ static void switch_slashes(string& name);
+@@ -85,6 +96,305 @@ static void switch_slashes(string& name);
  static bool base_to_uppercase(string& str, int count);
  
  // Global factories for instantiating file streams
@@ -419,9 +434,75 @@ index 6f68316..2d95965 100644
 +		~IoTimer() { io_ticks += n3ds_ticks() - t0; }
 +	};
 +
++	// Failed lookups are the hidden cost on the 3DS: Exult looks in the patch
++	// and mod folders before the game's own files, and every sound effect asks
++	// for a <PATCH>/sfx/NNN.wav override. Each miss cost several SD calls
++	// (open, then opendir, each also tried in upper case) of ~100 ms. The game
++	// never writes to its static, patch, mods or data folders, so each folder
++	// is listed once and a name it doesn't hold is "not there" at once.
++	std::map<std::string, std::shared_ptr<std::vector<std::string>>> n3ds_dir_lists;
++	unsigned long long                                               n3ds_skipped = 0;
++
++	std::string n3ds_lower(std::string t) {
++		for (auto& c : t) {
++			c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
++		}
++		return t;
++	}
++}    // namespace
++
++bool n3ds_known_missing(const char* path) {
++	const std::string p = n3ds_lower(path);
++	if (p.rfind("sdmc:/3ds/exult/", 0) != 0 || p.find("/gamedat") != std::string::npos
++		|| p.find("/saves") != std::string::npos) {
++		return false;
++	}
++	if (p.find("/static/") == std::string::npos && p.find("/patch/") == std::string::npos
++		&& p.find("/mods/") == std::string::npos && p.find("/data/") == std::string::npos) {
++		return false;
++	}
++	const size_t slash = p.find_last_of('/');
++	if (slash == std::string::npos || slash + 1 >= p.size()) {
++		return false;
++	}
++	const std::string dir = p.substr(0, slash), base = p.substr(slash + 1);
++	auto              it  = n3ds_dir_lists.find(dir);
++	if (it == n3ds_dir_lists.end()) {
++		std::shared_ptr<std::vector<std::string>> list;
++		// A missing parent means a missing folder: no need to ask the card.
++		const size_t up = dir.find_last_of('/');
++		if (up == std::string::npos || !n3ds_known_missing(dir.c_str())) {
++			if (DIR* d = opendir(dir.c_str())) {
++				list = std::make_shared<std::vector<std::string>>();
++				while (dirent* e = readdir(d)) {
++					list->push_back(n3ds_lower(e->d_name));
++				}
++				closedir(d);
++			}
++		}
++		it = n3ds_dir_lists.emplace(dir, list).first;
++	}
++	const auto& list = it->second;
++	const bool  miss = !list || std::find(list->begin(), list->end(), base) == list->end();
++	if (miss) {
++		n3ds_skipped++;
++	}
++	return miss;
++}
++
++unsigned long long n3ds_lookups_skipped() {
++	return n3ds_skipped;
++}
++
++namespace {
 +	std::unique_ptr<std::istream> n3ds_open_in(const char* s, std::ios_base::openmode mode) {
 +		IoTimer     timer;
 +		struct stat st {};
++		if (n3ds_known_missing(s)) {
++			auto fail = std::make_unique<std::ifstream>();
++			fail->setstate(std::ios::failbit);
++			return fail;
++		}
 +		io_stats++;
 +		if (::stat(s, &st) != 0 || !S_ISREG(st.st_mode)) {
 +			auto fail = std::make_unique<std::ifstream>();
@@ -473,8 +554,8 @@ index 6f68316..2d95965 100644
 +}
 +
 +extern "C" void n3ds_io_report(char* out, unsigned n) {
-+	std::snprintf(out, n, "io %.1f s: %llu stats, %llu whole reads (%.1f MB), %llu streamed files", n3ds_io_ms() / 1000.0,
-+				  io_stats, io_opens, bytes_read_whole / 1048576.0, io_streams);
++	std::snprintf(out, n, "io %.1f s: %llu stats, %llu whole reads (%.1f MB), %llu streamed files, %llu lookups skipped",
++				  n3ds_io_ms() / 1000.0, io_stats, io_opens, bytes_read_whole / 1048576.0, io_streams, n3ds_skipped);
 +}
 +
 +// Cumulative file writes; returns false if nothing changed since last call.
@@ -506,7 +587,7 @@ index 6f68316..2d95965 100644
  static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openmode mode) {
  	return std::make_unique<std::ifstream>(s, mode);
  };
-@@ -92,6 +336,7 @@ static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openm
+@@ -92,6 +402,7 @@ static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openm
  static U7OstreamFactory ostream_factory = [](const char* s, std::ios_base::openmode mode) {
  	return std::make_unique<std::ofstream>(s, mode);
  };
@@ -514,7 +595,7 @@ index 6f68316..2d95965 100644
  
  // Ugly hack for supporting different paths
  
-@@ -257,6 +502,12 @@ static bool base_to_uppercase(string& str, int count) {
+@@ -257,6 +568,12 @@ static bool base_to_uppercase(string& str, int count) {
  	if (count <= 0) {
  		return true;
  	}
@@ -527,6 +608,116 @@ index 6f68316..2d95965 100644
  
  	int todo = count;
  	// Go backwards.
+@@ -374,6 +691,11 @@ DIR* U7opendir(const char* fname    // May be converted to upper-case.
+ ) {
+ 	string name           = get_system_path(fname);
+ 	int    uppercasecount = 0;
++#ifdef N3DS_PORT
++	if (n3ds_known_missing(name.c_str())) {
++		return nullptr;
++	}
++#endif
+ 
+ 	do {
+ 		DIR* dir = opendir(name.c_str());    // Try to open
+diff --git a/game.cc b/game.cc
+index 66adab6..0d68c62 100644
+--- a/game.cc
++++ b/game.cc
+@@ -40,6 +40,9 @@
+ #include "gamemgr/devgame.h"
+ #include "gamemgr/modmgr.h"
+ #include "gamemgr/sigame.h"
++#ifdef N3DS_PORT
++#	include "miscinf.h"
++#endif
+ #include "gamewin.h"
+ #include "istring.h"
+ #include "items.h"
+@@ -569,7 +572,46 @@ bool Game::read_game_xml(const char* name1) {
+ 	return true;
+ }
+ 
++#ifdef N3DS_PORT
++extern "C" bool n3ds_frontend_take(int* action, const char** name, int* female, int* skin, const char** save);
++#endif
++
+ bool Game::show_menu(bool skip) {
++#ifdef N3DS_PORT
++	// The 3DS start screen: Continue, New Game (name, sex, skin) or Load.
++	{
++		int         action = 0, female = 0, skin = 0;
++		const char* name = nullptr;
++		const char* save = nullptr;
++		if (n3ds_frontend_take(&action, &name, &female, &skin, &save)) {
++			if (action == 2) {
++				const bool si_installed = gamemanager
++										  && (gamemanager->is_si_installed() || gamemanager->is_ss_installed())
++										  && U7exists("<SERPENT_STATIC>/shapes.vga");
++				Avatar_default_skin* defskin = Shapeinfo_lookup::GetDefaultAvSkin();
++				Skin_data*           sd      = Shapeinfo_lookup::GetSkinInfoSafe(
++                        skin == 0 && defskin ? defskin->default_skin : skin, female != 0, si_installed);
++				set_avskin(sd ? sd->skin_id : skin);
++				set_avname(name && *name ? name : "Avatar");
++				set_avsex(sd ? sd->is_female : female);
++				std::cout << "[exult-3ds] new game: " << (name ? name : "") << (female ? ", female" : ", male") << ", skin "
++						  << (sd ? sd->skin_id : skin) << std::endl;
++				if (gwin->init_gamedat(true)) {
++					return true;
++				}
++			} else {
++				if (action == 3 && save && *save) {
++					std::cout << "[exult-3ds] loading " << save << std::endl;
++					gwin->restore_gamedat(save);
++				}
++				if (gwin->init_gamedat(false)) {
++					return true;
++				}
++			}
++			skip = false;    // didn't work: fall back to the game's own menu
++		}
++	}
++#endif
+ 	// Brand-new game in development?
+ 	if (skip || (is_editing() && !U7exists(MAINSHP_FLX))) {
+ 		const bool first = !U7exists(IDENTITY);
+diff --git a/gamedat.cc b/gamedat.cc
+index f1f3c82..3fbe876 100644
+--- a/gamedat.cc
++++ b/gamedat.cc
+@@ -34,6 +34,14 @@
+ #include "gameclk.h"
+ #include "gamemap.h"
+ #include "gamewin.h"
++
++// 3DS: best compression made every save take many seconds on its CPU; the
++// fastest level is several times quicker for slightly bigger files.
++#ifdef N3DS_PORT
++#	define N3DS_SAVE_ZLEVEL Z_BEST_SPEED
++#else
++#	define N3DS_SAVE_ZLEVEL Z_BEST_COMPRESSION
++#endif
+ #include "listfiles.h"
+ #include "party.h"
+ #include "scene_layer.h"
+@@ -1019,7 +1027,7 @@ static bool Save_level1(zipFile zipfile, const char* fname) {
+ 	const size_t size = ds.getSize();
+ 	const auto   buf  = ds.readN(size);
+ 
+-	zipOpenNewFileInZip(zipfile, remove_dir(fname), nullptr, nullptr, 0, nullptr, 0, nullptr, Z_DEFLATED, Z_BEST_COMPRESSION);
++	zipOpenNewFileInZip(zipfile, remove_dir(fname), nullptr, nullptr, 0, nullptr, 0, nullptr, Z_DEFLATED, N3DS_SAVE_ZLEVEL);
+ 
+ 	zipWriteInFileInZip(zipfile, buf.get(), size);
+ 
+@@ -1039,7 +1047,7 @@ static bool Begin_level2(zipFile zipfile, int mapnum) {
+ 		oname[4]                             = hexLUT[mapnum % 16];
+ 		oname[5]                             = 0;
+ 	}
+-	return zipOpenNewFileInZip(zipfile, oname, nullptr, nullptr, 0, nullptr, 0, nullptr, Z_DEFLATED, Z_BEST_COMPRESSION) == ZIP_OK;
++	return zipOpenNewFileInZip(zipfile, oname, nullptr, nullptr, 0, nullptr, 0, nullptr, Z_DEFLATED, N3DS_SAVE_ZLEVEL) == ZIP_OK;
+ }
+ 
+ static bool Save_level2(zipFile zipfile, const char* fname) {
 diff --git a/gamemgr/bggame.cc b/gamemgr/bggame.cc
 index a2ab01b..00b5c64 100644
 --- a/gamemgr/bggame.cc
@@ -955,6 +1146,20 @@ index 2452312..66d9417 100644
  	void          destroy_layer(int handle);
  	Image_buffer* get_layer_ibuf(int handle);
  	// Mark a layer's buffer as changed so it is re-uploaded before the next
+diff --git a/keyactions.cc b/keyactions.cc
+index 8873b62..73bf2d1 100644
+--- a/keyactions.cc
++++ b/keyactions.cc
+@@ -141,6 +141,9 @@ void ActionQuicksave(const int* params) {
+ 		gwin->get_effects()->center_text(Strings::SavingGameFailed());
+ 		return;
+ 	}
++	// write() greys the whole screen for its "Saving game" message; repaint it
++	// all, or the grey stays wherever nothing moves (paused, indoors).
++	gwin->set_all_dirty();
+ 	gwin->get_effects()->center_text(Strings::GameSaved());
+ 	gwin->got_bad_feeling(8);
+ }
 diff --git a/scene_layer.h b/scene_layer.h
 index ec09ddf..dd7b80b 100644
 --- a/scene_layer.h

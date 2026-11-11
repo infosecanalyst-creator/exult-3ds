@@ -14,7 +14,8 @@ The original game was played with a mouse. This port is built for the stylus:
   - conversations, books, signs, the world map and the party's stats, so nothing covers the game while you read.
 - **Readable text:** a pixel font drawn for the 3DS screen replaces the original blackletter and its yellow. It's light grey with a black outline, and conversations get a dark box behind them, like TV subtitles.
 - **Stereoscopic 3D:** swap the game onto the top screen and the 3D slider gives the world real depth. Roofs, trees and walls rise out of the screen.
-- **A full instruction manual in the game** (L+Y).
+- **A start screen:** pick Black Gate or Serpent Isle, then Continue, New Game (name your Avatar) or Load Game, and go straight into play.
+- **A full instruction manual in the game** (L+Y). Circle Pad or C-Stick scroll it, the D-Pad moves between sections, L/R page through them, B closes it.
 - **Install and update over Wi-Fi** from a Windows PC. There's no need to take the SD card out, and saves can sync both ways with Exult on the PC.
 
 > Game data isn't included. You need your own copy of Ultima VII.
@@ -90,7 +91,7 @@ The full instruction manual is in the game: press **L+Y**, or tap the menu butto
   - Spells, Notes, Map, Stats, Keys, Food, Target, Combat, Save;
   - the Manual, Swap screens and Game menu.
 - **L+R zooms** the touchscreen to 1.5× or 2× around the Avatar. Taps still land where you touch.
-- **ZL swaps the screens (L+START also works).** The game goes on top, where the 3D slider works, and the dashboard comes down. Touches then point and click 1:1 on the game above.
+- **ZL swaps the screens (L+START also works).** The game goes on top, where the 3D slider works, and fills all 400×240 of it (Exult draws a wider view, nothing is stretched). The dashboard comes down, and the touchscreen works like a touchpad for the cursor.
 - First-time tips appear on the top screen the first time each is relevant.
 
 ### Buttons
@@ -140,13 +141,15 @@ Option **6** in `Exult-3DS.cmd` syncs saves both ways with Exult on the PC:
 
 ### Defaults (`sdmc:/3ds/exult/exult.cfg`)
 
-- **Game view:** 320×240 at 1:1, the touchscreen's size, which shows a little more of the map than the original 320×200. Exult draws it in the middle of the top screen's 400×240 window, so with the screens swapped the world fills the whole top screen.
+- **Game view:** 320×240 at 1:1, the touchscreen's size, which shows a little more of the map than the original 320×200. With the screens swapped the game area widens to 400×240, so the world fills the whole top screen.
 - **Music and sound:** OPL synth music, mono, 22 kHz. The digital OGG soundtrack is off to save CPU.
 - **CPU:** the New 3DS's 804 MHz mode and L2 cache are on.
 - **Intro:** the splash intro is skipped. View Introduction is still in the game menu.
 - **Fonts:** `modern`. This is U7 Pixel Sans, a font drawn pixel by pixel for this screen: capitals are 9 px tall and lowercase 6 px, in light grey with a black outline. It applies to conversations, names, labels and the bottom screen. Runic and Ophidian writing on signs stays in its original script. You can switch to Exult's Original or Serif fonts in the game's Display options.
 - **Text background:** a dark, translucent box behind conversation text (Exult's `textbackground` setting, set to 15, dark grey). Turn it off in Display options.
-- **Log:** `sdmc:/3ds/exult/exult.log`, with every line timestamped.
+- **Log:** `sdmc:/3ds/exult/exult.log`, with every line timestamped. It is kept in memory and written in batches by a background thread, since a single SD write can take seconds on a large card.
+- **Sound effects:** the Sound Quest packs (`sqsfxbg.flx`, `sqsfxsi.flx`) in `data/` when present.
+- **SD lookups:** the game's static, patch, mods and data folders are listed once, so files that aren't there (sound-effect overrides, patch files) cost no SD access.
 
 ## Building
 

@@ -10,9 +10,9 @@ This is Exult, the engine that runs Ultima VII on modern machines, made for the 
 It plays The Black Gate (with Forge of Virtue) and Serpent Isle (with The Silver Seed), using your own copy of the game.
 
 ## Reading this manual
-- Tap a section on the touchscreen to open it.
-- D-Pad up and down: scroll.
-- D-Pad left and right: previous and next section.
+- Scroll: Circle Pad or C-Stick up and down. Hold to keep scrolling.
+- Sections: tap one on the touchscreen, or move between them with the D-Pad.
+- Previous and next section: L and R.
 - B or Start: close. The manual opens again where you left it.
 
 # Getting started
@@ -23,11 +23,17 @@ It plays The Black Gate (with Forge of Virtue) and Serpent Isle (with The Silver
 
 The same steps install every update; only changed files are sent. You never need to take the SD card out.
 
-## Picking a game
-Exult's own menus appear on the touchscreen: tap a game, then Journey Onward to continue your game or Start New Game.
+## The start screen
+When Exult starts, the start screen appears right away:
+1. Pick The Black Gate or Serpent Isle (if only one is installed, it is picked for you).
+2. Continue: the game in progress.
+3. New Game: the name is Avatar unless you tap it to type another; pick male or female and a skin tone, then Start the game. You begin in Trinsic as the Avatar arrives.
+4. Load Game: your saves, newest first, by name and date.
 
-## The first start after an update
-Starting a game unpacks its working files. That takes a little while; later starts are quicker.
+The game then loads straight into play. "Exult's own menus" opens Exult's usual menus instead, for the introduction, the credits and mods.
+
+## Loading
+A new game unpacks its working files to the SD card, which takes a little while. Continue and Load are quicker.
 
 # The two screens
 ## Bottom screen: the game
@@ -106,7 +112,7 @@ Signs, plaques and gravestones keep their rune lettering, with the same words in
 L+R zooms the touchscreen to 1.5x, then 2x, then back. The view follows the Avatar and taps still land where you touch. The top screen shows ZOOM while it is on.
 
 ## Swapping the screens
-ZL (or Swap screens in the menu, or L+START) puts the game back on the top screen and the dashboard on the touchscreen. The game fills the top screen and the touchscreen becomes a touchpad: slide to move the pointer, tap to click where it points (the menu button in the corner still works). B is the right button. Press ZL again to swap back.
+ZL (or Swap screens in the menu, or L+START) puts the game back on the top screen and the dashboard on the touchscreen. The game fills the whole top screen, and the touchscreen works like a laptop touchpad: slide to move the cursor, tap to click. Press ZL again to swap back.
 
 ## 3D
 3D works when the game is on the top screen: swap the screens, then push the 3D slider up. Roofs, trees and people rise out of the screen; windows and text stay flat.

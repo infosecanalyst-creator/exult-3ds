@@ -1,9 +1,3 @@
-# sdl3-n3ds-virtual-input.patch -- Modified for exult-3ds, 2026-10.
-# Changes to SDL3 (https://github.com/libsdl-org/SDL, commit in SDL3_COMMIT)
-# for the Nintendo 3DS port: altered SDL source files are marked as such, as
-# the zlib licence requires, and stay under SDL's zlib licence. The new files
-# SDL_n3dsvinput.c/.h are by the exult-3ds authors, GPL-2.0-or-later.
-#
 diff --git a/src/audio/n3ds/SDL_n3dsaudio.c b/src/audio/n3ds/SDL_n3dsaudio.c
 index ded98ea..08daced 100644
 --- a/src/audio/n3ds/SDL_n3dsaudio.c
@@ -45,6 +39,42 @@ index ded98ea..08daced 100644
  }
  
  static bool N3DSAUDIO_Init(SDL_AudioDriverImpl *impl)
+diff --git a/src/joystick/n3ds/SDL_sysjoystick.c b/src/joystick/n3ds/SDL_sysjoystick.c
+index fda19dd..16cd785 100644
+--- a/src/joystick/n3ds/SDL_sysjoystick.c
++++ b/src/joystick/n3ds/SDL_sysjoystick.c
+@@ -143,11 +143,21 @@ static void UpdateN3DSReleasedButtons(Uint64 timestamp, SDL_Joystick *joystick)
+     previous_state = current_state;
+ }
+ 
++/* Exult-3DS: while the app's own UI (the manual) uses the sticks for
++   scrolling, report them centred to the game. */
++__attribute__((weak)) int N3DS_SticksBlocked(void)
++{
++    return 0;
++}
++
+ static void UpdateN3DSCircle(Uint64 timestamp, SDL_Joystick *joystick)
+ {
+     static circlePosition previous_state = { 0, 0 };
+     circlePosition current_state;
+     hidCircleRead(&current_state);
++    if (N3DS_SticksBlocked()) {
++        current_state.dx = current_state.dy = 0;
++    }
+     if (previous_state.dx != current_state.dx) {
+         SDL_SendJoystickAxis(timestamp, joystick,
+                                 0,
+@@ -166,6 +176,9 @@ static void UpdateN3DSCStick(Uint64 timestamp, SDL_Joystick *joystick)
+     static circlePosition previous_state = { 0, 0 };
+     circlePosition current_state;
+     hidCstickRead(&current_state);
++    if (N3DS_SticksBlocked()) {
++        current_state.dx = current_state.dy = 0;
++    }
+     if (previous_state.dx != current_state.dx) {
+         SDL_SendJoystickAxis(timestamp, joystick,
+                                 2,
 diff --git a/src/thread/n3ds/SDL_systhread.c b/src/thread/n3ds/SDL_systhread.c
 index 5c1f0a1..a23370d 100644
 --- a/src/thread/n3ds/SDL_systhread.c
@@ -343,10 +373,10 @@ index dd54a4c..ec9dd04 100644
  bool N3DS_StopTextInput(SDL_VideoDevice *_this, SDL_Window *window)
 diff --git a/src/video/n3ds/SDL_n3dsvinput.c b/src/video/n3ds/SDL_n3dsvinput.c
 new file mode 100644
-index 0000000..b843256
+index 0000000..657547f
 --- /dev/null
 +++ b/src/video/n3ds/SDL_n3dsvinput.c
-@@ -0,0 +1,329 @@
+@@ -0,0 +1,331 @@
 +/* SPDX-License-Identifier: GPL-2.0-or-later */
 +/* Copyright (C) 2026 the exult-3ds authors */
 +/*
@@ -452,6 +482,8 @@ index 0000000..b843256
 +    (void)kDown; (void)kHeld;
 +    return 0;
 +}
++
++int N3DS_SticksBlocked(void);    /* SDL_sysjoystick.c (weak; the app overrides it) */
 +
 +/* Lets the app keep the cursor inside the visible part of the window. */
 +__attribute__((weak)) void N3DS_ClampCursor(float *x, float *y)
@@ -613,7 +645,7 @@ index 0000000..b843256
 +touch_done:
 +    /* --- C-Stick: relative cursor with simple acceleration --- */
 +    hidCstickRead(&cstick);
-+    if (cstick.dx * cstick.dx + cstick.dy * cstick.dy > 15 * 15) {
++    if (!N3DS_SticksBlocked() && cstick.dx * cstick.dx + cstick.dy * cstick.dy > 15 * 15) {
 +        float sx = cstick.dx / 156.0f, sy = -cstick.dy / 156.0f;
 +        float speed = 2.0f + 6.0f * (sx * sx + sy * sy);
 +        cursor_x += sx * speed;

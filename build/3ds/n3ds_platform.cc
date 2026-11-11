@@ -32,6 +32,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <exception>
 #include <new>
 #include <string>
@@ -98,10 +99,12 @@ static const char* default_cfg =
 		"\t\t<game>\n"
 		"\t\t\t<blackgate>\n\t\t\t\t<path>\n\t\t\t\t" N3DS_HOME "/blackgate\n\t\t\t\t</path>\n"
 		"\t\t\t\t<savegame_path>\n\t\t\t\t" N3DS_HOME "/saves/bg\n\t\t\t\t</savegame_path>\n"
-		"\t\t\t\t<keys>\n\t\t\t\t(default)\n\t\t\t\t</keys>\n\t\t\t</blackgate>\n"
+		"\t\t\t\t<keys>\n\t\t\t\t(default)\n\t\t\t\t</keys>\n"
+		"\t\t\t\t<waves>\n\t\t\t\tsqsfxbg.flx\n\t\t\t\t</waves>\n\t\t\t</blackgate>\n"
 		"\t\t\t<serpentisle>\n\t\t\t\t<path>\n\t\t\t\t" N3DS_HOME "/serpentisle\n\t\t\t\t</path>\n"
 		"\t\t\t\t<savegame_path>\n\t\t\t\t" N3DS_HOME "/saves/si\n\t\t\t\t</savegame_path>\n"
-		"\t\t\t\t<keys>\n\t\t\t\t(default)\n\t\t\t\t</keys>\n\t\t\t</serpentisle>\n"
+		"\t\t\t\t<keys>\n\t\t\t\t(default)\n\t\t\t\t</keys>\n"
+		"\t\t\t\t<waves>\n\t\t\t\tsqsfxsi.flx\n\t\t\t\t</waves>\n\t\t\t</serpentisle>\n"
 		"\t\t</game>\n"
 		"\t\t<save_compression_level>\n\t\t1\n\t\t</save_compression_level>\n"
 		"\t</disk>\n"
@@ -135,6 +138,7 @@ static const char* default_cfg =
 		"\t\t\t<reverb>\n\t\t\t\t<enabled>\n\t\t\t\tno\n\t\t\t\t</enabled>\n\t\t\t</reverb>\n"
 		"\t\t\t<chorus>\n\t\t\t\t<enabled>\n\t\t\t\tno\n\t\t\t\t</enabled>\n\t\t\t</chorus>\n"
 		"\t\t</midi>\n"
+		"\t\t<effects>\n\t\t\t<enabled>\n\t\t\tyes\n\t\t\t</enabled>\n\t\t</effects>\n"
 		"\t\t<speech>\n\t\t\t<enabled>\n\t\t\tyes\n\t\t\t</enabled>\n\t\t</speech>\n"
 		"\t</audio>\n"
 		"\t<gameplay>\n\t\t<skip_splash>\n\t\tyes\n\t\t</skip_splash>\n\t\t<fonts>\n\t\tmodern\n\t\t</fonts>\n\t\t<textbackground>\n\t\t15\n\t\t</textbackground>\n\t</gameplay>\n"
@@ -160,44 +164,78 @@ static LightLock log_lock;
 static bool      log_lock_ready = false;
 static volatile u64 log_last_line = 0;    // when the game last logged anything
 
+// The log is built in memory and written by a background thread, so the
+// game never waits on the SD card for it. On this console's big card a write
+// that needs new space can take many seconds (the system searches the card's
+// allocation table), and those waits used to freeze the game for minutes at
+// startup. The file is also reused in place rather than truncated, so it
+// rarely needs new space at all; "<<< end of log >>>" marks where this run's
+// text ends.
+// Built on first use: this file's start-up code runs before C++ constructs
+// ordinary globals, which would otherwise wipe what was logged before main().
+static std::string& log_pending_ref() {
+	static std::string* p = new std::string;
+	return *p;
+}
+#define log_pending log_pending_ref()
+static long        log_pos = 0;
+static LightLock   log_file_lock;
+static const char  LOG_END[] = "\n<<< end of log >>>\n";
+
+static void log_write_out() {
+	std::string out;
+	LightLock_Lock(&log_lock);
+	out.swap(log_pending);
+	LightLock_Unlock(&log_lock);
+	if (out.empty() || !log_file) {
+		return;
+	}
+	LightLock_Lock(&log_file_lock);
+	fseek(log_file, log_pos, SEEK_SET);
+	log_pos += static_cast<long>(out.size());
+	out += LOG_END;    // one write per batch: every SD write costs ~100 ms on the 3DS
+	fwrite(out.data(), 1, out.size(), log_file);
+	fflush(log_file);
+	LightLock_Unlock(&log_file_lock);
+}
+
 static ssize_t log_write(struct _reent*, void*, const char* ptr, size_t len) {
-	if (log_lock_ready) {
-		LightLock_Lock(&log_lock);
+	if (!log_lock_ready) {
+		return static_cast<ssize_t>(len);
 	}
-	log_last_line = osGetTime();
-	if (log_file) {
-		const u64 now = osGetTime();
-		for (size_t i = 0; i < len;) {
-			if (log_at_bol) {
-				fprintf(log_file, "[%6.1f io %5.1f] ", (now - log_t0) / 1000.0, n3ds_io_ms() / 1000.0);
-				log_at_bol = false;
-			}
-			const char* nl  = static_cast<const char*>(memchr(ptr + i, '\n', len - i));
-			const size_t n  = nl ? static_cast<size_t>(nl - (ptr + i)) + 1 : len - i;
-			fwrite(ptr + i, 1, n, log_file);
-			if (nl) {
-				log_at_bol = true;
-			}
-			i += n;
+	LightLock_Lock(&log_lock);
+	const u64 now = osGetTime();
+	log_last_line = now;
+	char      stamp[48];
+	for (size_t i = 0; i < len;) {
+		if (log_at_bol) {
+			// Integer formatting only: this runs inside printf's own output
+			// path, and nesting floating-point formatting there garbles it.
+			const unsigned long t  = static_cast<unsigned long>((now - log_t0) / 100);
+			const unsigned long io = static_cast<unsigned long>(n3ds_io_ms() / 100.0);
+			snprintf(stamp, sizeof stamp, "[%5lu.%lu io %4lu.%lu] ", t / 10, t % 10, io / 10, io % 10);
+			log_pending += stamp;
+			log_at_bol = false;
 		}
-		if (now - log_last_flush >= 1000 || memmem(ptr, len, "FATAL", 5)) {
-			fflush(log_file);
-			log_last_flush = now;
+		const char*  nl = static_cast<const char*>(memchr(ptr + i, '\n', len - i));
+		const size_t n  = nl ? static_cast<size_t>(nl - (ptr + i)) + 1 : len - i;
+		log_pending.append(ptr + i, n);
+		if (nl) {
+			log_at_bol = true;
 		}
+		i += n;
 	}
-	if (log_lock_ready) {
-		LightLock_Unlock(&log_lock);
+	const bool fatal = memmem(ptr, len, "FATAL", 5) != nullptr;
+	LightLock_Unlock(&log_lock);
+	if (fatal) {
+		log_write_out();    // about to die: write it now
 	}
 	return static_cast<ssize_t>(len);
 }
 
-// Push buffered log lines to the SD card (called every few seconds from
-// the bottom-screen tick, so a quiet log still lands on the card).
+// Write what's pending now (on exit; the background thread does it otherwise).
 extern "C" void n3ds_log_flush() {
-	if (log_file) {
-		fflush(log_file);
-		log_last_flush = osGetTime();
-	}
+	log_write_out();
 }
 
 static void install_log() {
@@ -263,7 +301,8 @@ static void migrate_cfg() {
 	const bool v3 = !file_exists(N3DS_HOME "/.cfg-v3");    // modern fonts
 	const bool v4 = !file_exists(N3DS_HOME "/.cfg-v4");    // dark box behind conversation text
 	const bool v5 = !file_exists(N3DS_HOME "/.cfg-v5");    // game on the touchscreen: 320x240
-	if (!v2 && !v3 && !v4 && !v5) {
+	const bool v6 = !file_exists(N3DS_HOME "/.cfg-v6");    // sound effects: the Sound Quest packs
+	if (!v2 && !v3 && !v4 && !v5 && !v6) {
 		return;
 	}
 	FILE* f = fopen(N3DS_HOME "/exult.cfg", "rb");
@@ -356,13 +395,49 @@ static void migrate_cfg() {
 			}
 		}
 	}
+	if (v6) {
+		// Digital sound effects: Exult needs a sound pack (the installer sends
+		// the Sound Quest and Jmsfx packs to data/). Pick Sound Quest per game,
+		// unless a pack is already chosen, and make sure effects are on.
+		auto add_waves = [&](const char* game, const char* pack) {
+			const std::string open = std::string("<") + game + ">", close = std::string("</") + game + ">";
+			const size_t      a = cfg.find(open), b = cfg.find(close);
+			if (a == std::string::npos || b == std::string::npos || b < a) {
+				return;
+			}
+			if (cfg.substr(a, b - a).find("<waves>") == std::string::npos) {
+				cfg.insert(b, std::string("<waves>") + pack + "</waves>\n      ");
+				changed = true;
+			}
+		};
+		add_waves("blackgate", "sqsfxbg.flx");
+		add_waves("serpentisle", "sqsfxsi.flx");
+		const size_t e = cfg.find("<effects>");
+		if (e == std::string::npos) {
+			const size_t sp = cfg.find("<speech>");
+			if (sp != std::string::npos) {
+				cfg.insert(sp, "<effects>\n      <enabled>yes</enabled>\n    </effects>\n    ");
+				changed = true;
+			}
+		} else {
+			const size_t ee = cfg.find("</effects>", e);
+			const size_t en = cfg.find("<enabled>", e);
+			if (en != std::string::npos && en < ee) {
+				const size_t ec = cfg.find("</enabled>", en);
+				cfg.replace(en + 9, ec - en - 9, "yes");
+			} else {
+				cfg.insert(e + 9, "\n      <enabled>yes</enabled>");
+			}
+			changed = true;
+		}
+	}
 	if (changed) {
 		if (FILE* o = fopen(N3DS_HOME "/exult.cfg", "wb")) {
 			fwrite(cfg.data(), 1, cfg.size(), o);
 			fclose(o);
 		}
 	}
-	for (const char* marker : {N3DS_HOME "/.cfg-v2", N3DS_HOME "/.cfg-v3", N3DS_HOME "/.cfg-v4", N3DS_HOME "/.cfg-v5"}) {
+	for (const char* marker : {N3DS_HOME "/.cfg-v2", N3DS_HOME "/.cfg-v3", N3DS_HOME "/.cfg-v4", N3DS_HOME "/.cfg-v5", N3DS_HOME "/.cfg-v6"}) {
 		if (FILE* m = fopen(marker, "w")) {
 			fclose(m);
 		}
@@ -430,6 +505,21 @@ static int sdm_stat(struct _reent* r, const char* path, struct stat* st) {
 	return rv;
 }
 
+static u64      sdm_write_t = 0, sdm_write_max = 0;
+static volatile unsigned sdm_writes = 0;
+
+static ssize_t sdm_write(struct _reent* r, void* fd, const char* ptr, size_t len) {
+	const u64     t0 = svcGetSystemTick();
+	const ssize_t rv = sd_orig.write_r(r, fd, ptr, len);
+	const u64     dt = svcGetSystemTick() - t0;
+	sdm_write_t += dt;
+	sdm_writes++;
+	if (dt > sdm_write_max) {
+		sdm_write_max = dt;
+	}
+	return rv;
+}
+
 static DIR_ITER* sdm_diropen(struct _reent* r, DIR_ITER* d, const char* path) {
 	sdm_mark("diropen", path);
 	const u64 t0  = svcGetSystemTick();
@@ -452,6 +542,7 @@ static void sdm_install() {
 	if (sd_orig.close_r) sd_wrap.close_r = sdm_close;
 	if (sd_orig.stat_r) sd_wrap.stat_r = sdm_stat;
 	if (sd_orig.diropen_r) sd_wrap.diropen_r = sdm_diropen;
+	if (sd_orig.write_r) sd_wrap.write_r = sdm_write;
 	devoptab_list[idx] = &sd_wrap;
 }
 
@@ -461,9 +552,26 @@ static void sdm_install() {
 static void heartbeat(void*) {
 	u64      last_ops = 0;
 	unsigned beats    = 0;
+	u64      last_wt  = 0;
+	unsigned last_wn  = 0;
+	unsigned tick = 0;
+	u64      last_out = 0;
 	for (;;) {
-		svcSleepThread(2000000000LL);
-		if (!log_file) {
+		svcSleepThread(500000000LL);
+		// Each write ties up the SD card for a while, and the game reads it
+		// constantly while loading or saving: write the log in batches, every
+		// 10 seconds or when 16 KB has built up, not every half second.
+		{
+			const u64 t = osGetTime();
+			LightLock_Lock(&log_lock);
+			const size_t pend = log_pending.size();
+			LightLock_Unlock(&log_lock);
+			if (pend > 0 && (t - last_out >= 10000 || pend >= 16 * 1024)) {
+				log_write_out();
+				last_out = t;
+			}
+		}
+		if (++tick % 4 != 0 || !log_file) {
 			continue;
 		}
 		const u64 now   = osGetTime();
@@ -480,18 +588,52 @@ static void heartbeat(void*) {
 			continue;
 		}
 		beats++;
+		// How fast is this core for us right now? 1M dependent adds take
+		// about 2.5 ms at full speed. If this is slow too, the whole core is
+		// slow; if it is fast while the game crawls, something preempts it.
+		const u64 c0 = svcGetSystemTick();
+		u32       acc = 0;
+		for (u32 i = 0; i < 1000000u; i++) {
+			__asm__ volatile("add %0, %0, #1" : "+r"(acc));
+		}
+		const double probe_ms = (svcGetSystemTick() - c0) / 268111.856;
+		std::string hb;
+		char        line[512];
+		snprintf(line, sizeof line,
+				"[%6.1f hb] quiet %.0f s; SD calls since last beat %llu; last: %s; cpu probe %.1f ms; "
+				"writes since %u taking %.1f s (slowest ever %.0f ms)\n",
+				(now - log_t0) / 1000.0, (now - log_last_line) / 1000.0, static_cast<unsigned long long>(sdm_ops - last_ops),
+				sdm_last, probe_ms, sdm_writes - last_wn, (sdm_write_t - last_wt) / 268111856.0, sdm_write_max / 268111.856);
+		hb += line;
+		last_wn = sdm_writes;
+		last_wt = sdm_write_t;
+		if (beats == 1) {    // once per quiet spell: every thread in the process
+			u32 ids[32];
+			s32 n = 0;
+			if (R_SUCCEEDED(svcGetThreadList(&n, ids, 32, CUR_PROCESS_HANDLE)) && n > 0 && n <= 32) {
+				snprintf(line, sizeof line, "[%6.1f hb] threads:", (now - log_t0) / 1000.0);
+				hb += line;
+				for (s32 k = 0; k < n; k++) {
+					Handle th = 0;
+					s32    pr = -1;
+					if (R_SUCCEEDED(svcOpenThread(&th, CUR_PROCESS_HANDLE, ids[k]))) {
+						svcGetThreadPriority(&pr, th);
+						svcCloseHandle(th);
+					}
+					snprintf(line, sizeof line, " id%lu/prio0x%lx", static_cast<unsigned long>(ids[k]), static_cast<long>(pr));
+					hb += line;
+				}
+				hb += "\n";
+			}
+		}
 		LightLock_Lock(&log_lock);
-		fprintf(log_file, "[%6.1f hb] quiet %.0f s; SD calls since last beat %llu; last: %s\n", (now - log_t0) / 1000.0,
-				(now - log_last_line) / 1000.0, static_cast<unsigned long long>(sdm_ops - last_ops), sdm_last);
-		fflush(log_file);
+		log_pending += hb;
 		LightLock_Unlock(&log_lock);
 		last_ops = sdm_ops;
 	}
 }
 
 static void heartbeat_start() {
-	LightLock_Init(&log_lock);
-	log_lock_ready = true;
 	s32 prio       = 0x30;
 	svcGetThreadPriority(&prio, CUR_THREAD_HANDLE);
 	// Above the game (it sleeps almost all the time), on the game's core.
@@ -516,6 +658,24 @@ __attribute__((constructor(101))) static void n3ds_early_init() {
 	mkdir(N3DS_HOME "/saves/si", 0777);
 	chdir(N3DS_HOME);
 	setenv("HOME", N3DS_HOME, 1);
+
+	// A forced power-off while a game was being set up or saved can leave a
+	// gamedat folder without its identity file, and Journey Onward then
+	// crashes. Move such a folder aside (never delete) so the game starts clean.
+	for (const char* game : {"blackgate", "serpentisle"}) {
+		const std::string dir = std::string(N3DS_HOME "/") + game + "/gamedat";
+		struct stat       st;
+		if (stat(dir.c_str(), &st) == 0 && S_ISDIR(st.st_mode) && !file_exists((dir + "/identity").c_str())) {
+			mkdir(N3DS_HOME "/_to_delete", 0777);
+			for (int k = 1; k < 100; k++) {
+				const std::string to = std::string(N3DS_HOME "/_to_delete/") + game + "-gamedat-incomplete-" + std::to_string(k);
+				if (!file_exists(to.c_str())) {
+					rename(dir.c_str(), to.c_str());
+					break;
+				}
+			}
+		}
+	}
 
 	if (!file_exists(N3DS_HOME "/exult.cfg")) {
 		if (FILE* f = fopen(N3DS_HOME "/exult.cfg", "w")) {
@@ -542,11 +702,31 @@ __attribute__((constructor(101))) static void n3ds_early_init() {
 	}
 	// Route stdout/stderr (fds 1 and 2) to exult.log through our own device,
 	// so the bottom-screen console can borrow them briefly for the legend.
-	log_file = fopen(N3DS_HOME "/exult.log", "w");
+	// Reuse the log file in place (see log_write): make it 256 KB once, then
+	// overwrite it from the start each launch.
+	{
+		struct stat st;
+		if (stat(N3DS_HOME "/exult.log", &st) != 0 || st.st_size < 256 * 1024) {
+			if (FILE* f = fopen(N3DS_HOME "/exult.log", st.st_size > 0 ? "r+b" : "wb")) {
+				static char blank[4096];
+				memset(blank, ' ', sizeof blank);
+				fseek(f, 0, SEEK_END);
+				for (long sz = ftell(f); sz < 256 * 1024; sz += sizeof blank) {
+					fwrite(blank, 1, sizeof blank, f);
+				}
+				fclose(f);
+			}
+		}
+	}
+	log_file = fopen(N3DS_HOME "/exult.log", "r+b");
 	log_t0   = osGetTime();
+	LightLock_Init(&log_lock);
+	LightLock_Init(&log_file_lock);
+	log_lock_ready = true;
 	if (log_file) {
 		setvbuf(log_file, nullptr, _IOFBF, 32 * 1024);
 	}
+	atexit([] { log_write_out(); });
 	log_dotab.name       = "exultlog";
 	log_dotab.structSize = 0;
 	log_dotab.write_r    = log_write;
@@ -645,6 +825,15 @@ static void n3ds_bench() {
 		sd_mb = got / 1048576.0;
 		fclose(f);
 	}
+	// SD card: free space, and how fast writing a new file is (32 KB chunks).
+	{
+		FS_ArchiveResource res{};
+		if (R_SUCCEEDED(FSUSER_GetArchiveResource(&res, SYSTEM_MEDIATYPE_SD))) {
+			const double cl = res.clusterSize;
+			printf("[exult-3ds] check: SD card %.0f MB free of %.0f MB (cluster %lu KB)\n", res.freeClusters * cl / 1048576.0,
+				   res.totalClusters * cl / 1048576.0, static_cast<unsigned long>(res.clusterSize / 1024));
+		}
+	}
 	printf("[exult-3ds] check: New3DS %s (%.0f ms), ptm:sysm %s (%.0f ms), 100M adds %.0f ms (~%.0f MHz)\n",
 		   n3ds ? "yes" : "no", apt_ms, R_SUCCEEDED(ptm) ? "ok" : "DENIED", ptm_ms, add_ms, 100000.0 / add_ms);
 	printf("[exult-3ds] check: malloc 4MB %.1f ms, memset heap %.0f MB/s, memcpy heap %.0f MB/s, memset linear %.0f MB/s, "
@@ -694,8 +883,11 @@ extern "C" void n3ds_show_legend() {
 	install_log();    // back to exult.log
 }
 
+extern "C" void n3ds_frontend_run();    // n3ds_frontend.cc: the start screen
+
 extern "C" void n3ds_after_sdl_init() {
 	n3ds_bottom_init();
+	n3ds_frontend_run();    // pick the game and how to start it, before Exult loads
 	if (linked_to_pc) {
 		// The console would take stdout back from the network link, so print
 		// the legend to the PC terminal instead.
