@@ -67,7 +67,11 @@ void __system_allocateHeaps(void) {
 	svcGetResourceLimitCurrentValues(&currentCommit, reslimit, &type, 1);
 	svcCloseHandle(reslimit);
 
-	const u32 remaining  = static_cast<u32>(maxCommit - currentCommit) & ~0xFFFu;
+	// Leave a few MB uncommitted: with every byte committed, the Homebrew loader
+	// ran out of memory (D86007F3) relaunching after Exult quit on hardware (Nov 13 2026).
+	const u32 reserve    = 4u << 20;
+	u32       remaining  = static_cast<u32>(maxCommit - currentCommit) & ~0xFFFu;
+	remaining            = remaining > reserve * 4 ? remaining - reserve : remaining;
 	const u32 heap_max   = OS_HEAP_AREA_END - OS_HEAP_AREA_BEGIN;    // 96 MB
 	const u32 linear_min = 16u << 20;
 	u32       heap       = remaining > linear_min ? remaining - linear_min : remaining / 2;
