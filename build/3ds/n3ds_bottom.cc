@@ -242,15 +242,16 @@ namespace {
 			rgb[i]      = static_cast<uint16_t>(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
 			rgb32[i] = (static_cast<uint32_t>(r) << 24) | (static_cast<uint32_t>(g) << 16) | (static_cast<uint32_t>(b) << 8) | 0xFF;
 		}
-		C_BG       = nearest(18, 14, 10);
-		C_PANEL    = nearest(70, 50, 30);
-		C_PANEL_HI = nearest(150, 110, 50);
-		C_EDGE     = nearest(120, 90, 50);
+		// house palette (claude/3ds-look-and-feel.md), matched to the game's 256 colours
+		C_BG       = nearest(8, 12, 40);
+		C_PANEL    = nearest(40, 56, 120);
+		C_PANEL_HI = nearest(220, 180, 60);
+		C_EDGE     = nearest(120, 150, 230);
 		C_RED      = 22;
 		C_GREEN    = 64;
 		C_BLUE     = 79;
-		C_DIM      = nearest(40, 32, 24);
-		C_TEXT     = nearest(230, 220, 190);
+		C_DIM      = nearest(20, 30, 70);    // a dark shade (house shadow), used for tracks and empty tiles
+		C_TEXT     = nearest(240, 240, 240);
 		C_YELLOW   = nearest(240, 220, 60);
 		pal_loaded = true;
 	}

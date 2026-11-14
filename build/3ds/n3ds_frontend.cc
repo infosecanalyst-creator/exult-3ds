@@ -41,9 +41,10 @@ namespace {
 		return (static_cast<uint32_t>(r) << 24) | (static_cast<uint32_t>(g) << 16) | (static_cast<uint32_t>(b) << 8) | 0xFF;
 	}
 
-	const uint32_t C_BG = rgb(20, 15, 10), C_PANEL = rgb(70, 50, 30), C_PANEL_HI = rgb(150, 110, 50), C_EDGE = rgb(120, 90, 50),
-				   C_TEXT = rgb(236, 236, 236), C_DIM = rgb(165, 155, 135), C_GOLD = rgb(232, 192, 96), C_OFF = rgb(45, 36, 26),
-				   C_RED = rgb(200, 60, 50);
+	// the house palette shared by all of Ryan's 3DS ports (claude/3ds-look-and-feel.md)
+	const uint32_t C_BG = rgb(8, 12, 40), C_PANEL = rgb(40, 56, 120), C_PANEL_HI = rgb(220, 180, 60), C_EDGE = rgb(120, 150, 230),
+				   C_TEXT = rgb(240, 240, 240), C_DIM = rgb(150, 150, 165), C_GOLD = rgb(255, 204, 64), C_OFF = rgb(20, 30, 70),
+				   C_RED = rgb(255, 80, 64), C_SHADOW = rgb(20, 30, 70), C_HINT = rgb(4, 6, 20);
 
 	// ---- Drawing ------------------------------------------------------------
 	struct Canvas {
@@ -260,16 +261,27 @@ namespace {
 	};
 
 	void draw_button(Canvas& c, const Button& b, bool focus, bool pressed) {
-		const uint32_t edge = focus ? C_GOLD : C_EDGE;
+		// house button: 1 px edge, face, shadow line; pressed = gold face, label sinks 1 px;
+		// D-pad focus = a 2 px gold ring outside; "on" options get a gold edge and label
+		if (focus) {
+			c.fill(b.x - 3, b.y - 3, b.w + 6, b.h + 6, C_GOLD);
+			c.fill(b.x - 1, b.y - 1, b.w + 2, b.h + 2, C_BG);
+		}
+		const bool     down = pressed && b.enabled;
+		const uint32_t edge = !b.enabled ? C_SHADOW : b.on ? C_GOLD : C_EDGE;
 		c.fill(b.x, b.y, b.w, b.h, edge);
-		const uint32_t face = !b.enabled ? C_OFF : (pressed || b.on) ? C_PANEL_HI : C_PANEL;
-		c.fill(b.x + 2, b.y + 2, b.w - 4, b.h - 4, face);
-		const uint32_t tc = b.enabled ? C_TEXT : C_DIM;
+		const uint32_t face = !b.enabled ? C_BG : down ? C_PANEL_HI : C_PANEL;
+		c.fill(b.x + 1, b.y + 1, b.w - 2, b.h - 2, face);
+		if (!down && b.enabled) {
+			c.fill(b.x + 1, b.y + b.h - 2, b.w - 2, 1, C_SHADOW);
+		}
+		const int      sink = down ? 1 : 0;
+		const uint32_t tc   = !b.enabled ? C_DIM : down ? C_BG : b.on ? C_GOLD : C_TEXT;
 		if (b.sub.empty()) {
-			c.text_c(b.label, b.x + b.w / 2, b.y + (b.h - 9) / 2, 1, tc);
+			c.text_c(b.label, b.x + b.w / 2, b.y + (b.h - 9) / 2 + sink, 1, tc);
 		} else {
-			c.text_c(b.label, b.x + b.w / 2, b.y + b.h / 2 - 12, 1, tc);
-			c.text_c(b.sub, b.x + b.w / 2, b.y + b.h / 2 + 3, 1, C_DIM);
+			c.text_c(b.label, b.x + b.w / 2, b.y + b.h / 2 - 12 + sink, 1, tc);
+			c.text_c(b.sub, b.x + b.w / 2, b.y + b.h / 2 + 3 + sink, 1, down ? C_BG : C_DIM);
 		}
 	}
 
@@ -277,17 +289,21 @@ namespace {
 
 	void draw_top(Canvas& t, Screen s, int g, const std::vector<std::string>& lines) {
 		std::fill(t.px.begin(), t.px.end(), C_BG);
-		t.text_c("ULTIMA VII", TW / 2, 22, 3, C_GOLD);
-		t.text_c(g > 0 ? games[g - 1].title : "for the New Nintendo 3DS", TW / 2, 60, g > 0 ? 2 : 1, C_TEXT);
-		t.fill(60, 88, TW - 120, 1, C_EDGE);
-		int y = 100;
+		// house header bar (22 px) and hint strip (16 px at y 224)
+		t.fill(0, 0, TW, 22, C_PANEL);
+		t.fill(0, 22, TW, 1, C_EDGE);
+		t.text("Ultima VII", 8, 7, 1, C_GOLD);
+		t.text_c("ULTIMA VII", TW / 2, 36, 3, C_GOLD);
+		t.text_c(g > 0 ? games[g - 1].title : "for the New Nintendo 3DS", TW / 2, 72, g > 0 ? 2 : 1, C_TEXT);
+		t.fill(60, 98, TW - 120, 1, C_EDGE);
+		int y = 108;
 		for (const auto& l : lines) {
 			t.text_c(l, TW / 2, y, 1, l.rfind("!", 0) == 0 ? C_RED : C_DIM);
 			y += 15;
 		}
 		(void)s;
-		t.fill(0, H - 16, TW, 16, C_PANEL);
-		t.text_c("Tap a button, or use the D-Pad and A.  B: back", TW / 2, H - 13, 1, C_DIM);
+		t.fill(0, H - 16, TW, 16, C_HINT);
+		t.text_c("Tap a button, or D-Pad and A    B: back", TW / 2, H - 12, 1, C_GOLD);
 	}
 
 	bool keyboard(std::string& name) {
