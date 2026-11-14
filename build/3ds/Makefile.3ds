@@ -9,7 +9,7 @@ P3DS     := $(DEVKITPRO)/portlibs/3ds
 CTRU     := $(DEVKITPRO)/libctru
 ARCH     := -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
 SERVER_OBJS := server/objserial.o server/servemsg.o server/server.o
-THREEDS_OBJS := 3ds/n3ds_platform.o 3ds/n3ds_bottom.o 3ds/n3ds_stereo.o 3ds/n3ds_frontend.o
+THREEDS_OBJS := 3ds/n3ds_platform.o 3ds/n3ds_bottom.o 3ds/n3ds_stereo.o 3ds/n3ds_frontend.o 3ds/selftest.o
 OBJS     += $(THREEDS_OBJS)
 
 CPPFLAGS := -D__3DS__ -DN3DS_PORT -DVERSION=\"$(VERSION)\" -DEXULT_DATADIR=\"sdmc:/3ds/exult/data\" \
@@ -21,6 +21,10 @@ CPPFLAGS := -D__3DS__ -DN3DS_PORT -DVERSION=\"$(VERSION)\" -DEXULT_DATADIR=\"sdm
 CXXFLAGS := -std=gnu++17 -O2 -g0 $(ARCH) -ffunction-sections -fdata-sections -w -MMD
 CFLAGS   := -O2 $(ARCH) -ffunction-sections -w -MMD
 LDFLAGS  := -specs=3dsx.specs $(ARCH) -Wl,--gc-sections
+# Hardware test hooks (3ds-test-suite hwtest/selftest): inactive unless the test agent
+# starts the game with --selftest=<script>.
+SELFTEST_WRAP := hidScanInput hidKeysHeld hidKeysDown hidKeysDownRepeat hidKeysUp hidTouchRead hidCircleRead irrstCstickRead aptMainLoop
+LDFLAGS  += $(foreach f,$(SELFTEST_WRAP),-Wl,--wrap=$(f))
 LIBS     := -L$(DEPS)/lib -L$(P3DS)/lib -L$(CTRU)/lib \
 	-lSDL3 -lvorbisfile -lvorbis -logg -lz -lcitro3d -lctru -lm
 
