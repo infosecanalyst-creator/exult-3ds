@@ -20,6 +20,7 @@ jobs:
           mkdir -p out
           cp build/out/exult.3dsx build.log out/ 2>/dev/null || true
           cp -r build/out/data out/ 2>/dev/null || true
+          gzip -9c build/work/exult/exult.elf > out/exult.elf.gz 2>/dev/null || true   # symbols for crash dumps
           echo "$GITHUB_SHA" > out/SOURCE_COMMIT
       - name: Publish to builds branch
         if: success()   # never replace the last good build with a failed one; failed-build logs stay in the Actions run
