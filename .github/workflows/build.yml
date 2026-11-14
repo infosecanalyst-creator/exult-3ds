@@ -51,6 +51,8 @@ jobs:
           mkdir -p out
           cp build/out/exult.3dsx out/
           cp -r build/out/data out/ 2>/dev/null || true
+          # the .elf (symbols) so crash dumps from the 3DS can be looked up
+          gzip -9c build/work/exult/exult.elf > out/exult.elf.gz || true
           echo "$GITHUB_SHA" > out/SOURCE_COMMIT
           cd out
           git init -q -b builds
