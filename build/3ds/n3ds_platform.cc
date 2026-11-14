@@ -63,8 +63,17 @@ void __system_allocateHeaps(void) {
 	}
 	s64               maxCommit = 0, currentCommit = 0;
 	ResourceLimitType type      = RESLIMIT_COMMIT;
-	svcGetResourceLimitLimitValues(&maxCommit, reslimit, &type, 1);
-	svcGetResourceLimitCurrentValues(&currentCommit, reslimit, &type, 1);
+	// The previous app (the test agent, or the Homebrew Menu) may still be shutting down and
+	// holding its memory, which counts against the same limit: wait up to 3 s for it to be
+	// released instead of starting with almost nothing (that panicked here on Nov 13 2026).
+	for (int tries = 0; tries < 300; tries++) {
+		svcGetResourceLimitLimitValues(&maxCommit, reslimit, &type, 1);
+		svcGetResourceLimitCurrentValues(&currentCommit, reslimit, &type, 1);
+		if (maxCommit - currentCommit >= (64ll << 20)) {
+			break;
+		}
+		svcSleepThread(10000000LL);
+	}
 	svcCloseHandle(reslimit);
 
 	// Leave a few MB uncommitted: with every byte committed, the Homebrew loader
