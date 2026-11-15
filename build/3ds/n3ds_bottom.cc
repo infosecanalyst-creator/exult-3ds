@@ -13,7 +13,7 @@
  *                   problems ("Iolo is hungry") and recent messages
  * A small menu button (three bars) in the game's top-right corner opens a
  * pop-up with the party's inventories and the rest of the commands.
- * L+START swaps the screens: the game goes back to the top screen (where the
+ * ZL swaps the screens: the game goes back to the top screen (where the
  * 3D slider works) and the dashboard moves to the bottom screen, which
  * then works as a touchpad: slide to move the cursor, tap to click. L+Y opens a guide.
  *
@@ -32,6 +32,7 @@
 #include "chunkter.h"
 #include "combat_opts.h"
 #include "conversation.h"
+#include "exult.h"
 #include "exult_constants.h"
 #include "game.h"
 #include "font.h"
@@ -148,7 +149,7 @@ namespace {
 	};
 
 	// Layout state
-	bool game_on_top  = false;    // L+START: game back on the top screen
+	bool game_on_top  = false;    // ZL: game back on the top screen
 	bool in_game      = false;
 	bool pending_swap = false;
 	int  PW           = MAX_PW;    // dashboard width: 400 on top, 320 on bottom
@@ -169,7 +170,7 @@ namespace {
 	bool             touch_ui    = false;
 	int              help_page   = -1;    // guide page, -1 = closed
 	bool             any_tag_now = false;
-	unsigned char    C_BG, C_PANEL, C_PANEL_HI, C_EDGE, C_RED, C_BLUE, C_GREEN, C_DIM, C_TEXT, C_YELLOW;
+	unsigned char    C_BG, C_PANEL, C_PANEL_HI, C_EDGE, C_RED, C_BLUE, C_GREEN, C_DIM, C_TEXT, C_YELLOW, C_GOLD;
 
 	// Menu button: top-right corner of the bottom screen.
 	constexpr int MB_X = GAME_W - 34, MB_Y = 6, MB_W = 28, MB_H = 24;    // UI rule 11: 24 px tall, 6 px from the edges
@@ -253,6 +254,7 @@ namespace {
 		C_DIM      = nearest(20, 30, 70);    // a dark shade (house shadow), used for tracks and empty tiles
 		C_TEXT     = nearest(240, 240, 240);
 		C_YELLOW   = nearest(240, 220, 60);
+		C_GOLD     = nearest(255, 204, 64);
 		pal_loaded = true;
 	}
 
@@ -1500,10 +1502,82 @@ namespace {
 		}
 	}
 
+	// ---- START port menu (house style, claude/3ds-look-and-feel.md) -----------------
+	enum { ID_PM = 600 };
+	bool pm_open  = false;
+	int  pm_page  = 0;    // 0 items, 1 exit confirm
+	int  pm_focus = 0;
+	enum { PM_RESUME, PM_MANUAL, PM_SAVE, PM_OPTIONS, PM_COMMANDS, PM_LEFTY, PM_EXIT, PM_COUNT };
+	const char* const pm_labels[PM_COUNT] = {"RESUME", "MANUAL", "SAVE / LOAD", "GAME OPTIONS", "COMMANDS", "", "EXIT GAME"};
+
+	int pm_count() {
+		return pm_page == 0 ? PM_COUNT : 2;
+	}
+
+	void pm_rect(int i, int& x, int& y, int& w, int& h) {
+		if (pm_page == 0) {
+			x = 40; w = GAME_W - 80; h = 24;
+			y = 26 + i * 28;
+		} else {
+			w = 114; h = 26; y = 130;
+			x = 40 + i * (114 + 12);
+		}
+	}
+
+	void pm_button(int i, const char* label) {
+		int x, y, w, h;
+		pm_rect(i, x, y, w, h);
+		const int id = ID_PM + i;
+		const bool pressed = pressed_id == id;
+		const int off = pressed ? 1 : 0;
+		panel(x, y + off, w, h, pressed);
+		target->fill8(C_DIM, w, 1, x, y + off + h - 1);    // shadow line
+		if (i == pm_focus && pressed_id < 0) {             // gold focus ring
+			target->fill8(C_GOLD, w, 2, x, y + off);
+			target->fill8(C_GOLD, w, 2, x, y + off + h - 2);
+			target->fill8(C_GOLD, 2, h, x, y + off);
+			target->fill8(C_GOLD, 2, h, x + w - 2, y + off);
+		}
+		text_centered(0, label, x + w / 2, y + off + (h - 9) / 2, w - 8);
+		mhits.push_back({x, y, w, h, SDLK_UNKNOWN, SDL_KMOD_NONE, id});
+	}
+
+	void draw_port_menu() {
+		if (!g_lefty_loaded) {
+			lefty_load();
+		}
+		target->fill8(C_BG, GAME_W, H, 0, 0);
+		target->fill8(C_PANEL, GAME_W, 22, 0, 0);
+		text(0, pm_page == 0 ? "MENU" : "EXIT GAME", 8, 7);
+		if (pm_page == 0) {
+			for (int i = 0; i < PM_COUNT; i++) {
+				pm_button(i, i == PM_LEFTY ? (g_lefty ? "LEFT HAND: ON" : "LEFT HAND: OFF") : pm_labels[i]);
+			}
+		} else {
+			text_centered(0, "Exit Ultima VII?", GAME_W / 2, 70, GAME_W - 16);
+			text_centered(0, "Progress since your last save is lost.", GAME_W / 2, 90, GAME_W - 16);
+			pm_button(0, "YES");
+			pm_button(1, "NO");
+		}
+		target->fill8(C_DIM, GAME_W, 16, 0, H - 16);    // hint strip
+		text_centered(0, lh("D-Pad: choose   A: select   B: back"), GAME_W / 2, H - 13, GAME_W - 8);
+	}
+
+	void pm_close() {
+		pm_open = false;
+		pm_page = 0;
+	}
+
 	void draw_menu(Game_window* gwin) {
 		Image_buffer8* prev_target = target;
 		target                     = mbuf;
 		mhits.clear();
+		if (pm_open) {
+			draw_port_menu();
+			target     = prev_target;
+			menu_dirty = false;
+			return;
+		}
 		if (help_page >= 0) {    // the manual is open: its sections
 			draw_manual_menu();
 			target     = prev_target;
@@ -1582,6 +1656,9 @@ namespace {
 	}
 
 	void set_menu(bool open) {
+		if (!open) {
+			pm_close();
+		}
 		if (!open && help_page >= 0 && !game_on_top) {
 			help_page = -1;    // the manual's section buttons were the menu
 			last_draw = 0;
@@ -1892,15 +1969,92 @@ extern "C" u32 N3DS_Remap(u32 m) {
 }
 
 // Buttons taken for the layout's own UI.
+// START port menu: act on item i of the current page
+static void pm_act(int i) {
+	if (pm_page == 0) {
+		switch (i) {
+		case PM_RESUME:
+			set_menu(false);
+			break;
+		case PM_MANUAL:
+			set_menu(false);
+			open_guide(true);
+			break;
+		case PM_SAVE:
+			set_menu(false);
+			push_key(SDLK_S, SDL_KMOD_NONE);       // Exult's save / restore screen
+			break;
+		case PM_OPTIONS:
+			set_menu(false);
+			push_key(SDLK_ESCAPE, SDL_KMOD_NONE);  // Exult's game menu (options, video, audio)
+			break;
+		case PM_COMMANDS:
+			pm_close();                            // the command grid (party, spells, map, ...)
+			break;
+		case PM_LEFTY:
+			lefty_set(!g_lefty);
+			break;
+		case PM_EXIT:
+			pm_page  = 1;
+			pm_focus = 1;                          // the focus starts on NO
+			break;
+		}
+	} else if (i == 0) {
+		set_menu(false);
+		quitting_time = QUIT_TIME_YES;             // already asked here: no second prompt
+	} else {
+		pm_page  = 0;
+		pm_focus = PM_EXIT;
+	}
+	menu_dirty    = true;
+	overlay_dirty = true;
+	last_draw     = 0;
+}
+
+static void pm_show() {
+	pm_open  = true;
+	pm_page  = 0;
+	pm_focus = 0;
+	set_menu(true);
+	pm_open    = true;    // set_menu(true) keeps it; set again in case the menu was already open
+	menu_dirty = true;
+}
+
 extern "C" u32 N3DS_KeyHook(u32 kDown, u32 kHeld) {
 	if (!in_game) {
 		return 0;
 	}
 	u32        taken = 0;
 	const bool l     = (kHeld & KEY_L) != 0;
-	if (l && (kDown & KEY_START)) {
-		pending_swap = true;
-		taken |= KEY_START;
+	// START port menu (house style). While it is open it takes the D-Pad, A, B and START.
+	// The screens swap with ZL only (L+START used to swap too).
+	if (pm_open) {
+		const int n = pm_count();
+		if (kDown & (KEY_B | KEY_START)) {
+			click3ds::play();
+			if (pm_page == 1) {
+				pm_page  = 0;
+				pm_focus = PM_EXIT;
+			} else {
+				set_menu(false);
+			}
+		} else if (pm_page == 0 && (kDown & (KEY_DUP | KEY_DDOWN))) {
+			pm_focus = (pm_focus + ((kDown & KEY_DDOWN) ? 1 : n - 1)) % n;
+		} else if (pm_page == 1 && (kDown & (KEY_DLEFT | KEY_DRIGHT | KEY_DUP | KEY_DDOWN))) {
+			pm_focus = 1 - pm_focus;
+		} else if (kDown & KEY_A) {
+			click3ds::play();
+			pm_act(pm_focus);
+		}
+		menu_dirty    = true;
+		overlay_dirty = true;
+		last_draw     = 0;
+		return taken | (kDown & (KEY_DUP | KEY_DDOWN | KEY_DLEFT | KEY_DRIGHT | KEY_A | KEY_B | KEY_START));
+	}
+	if ((kDown & KEY_START) && !l && help_page < 0) {
+		click3ds::play();
+		pm_show();
+		return taken | KEY_START;
 	}
 	if (kDown & KEY_ZL) {    // ZL swaps the screens at any time
 		pending_swap = true;
@@ -2268,6 +2422,12 @@ extern "C" int N3DS_BottomTouch(int phase, int x, int y, float* nx, float* ny) {
 		if (!menu_open) {
 			if (on_button) {
 				set_menu(true);
+			}
+		} else if (pm_open) {
+			const int now_hit = hit_at(x, y);
+			if (touch_hit >= 0 && now_hit == touch_hit && mhits[touch_hit].id >= ID_PM) {
+				pm_focus = mhits[touch_hit].id - ID_PM;
+				pm_act(pm_focus);
 			}
 		} else {
 			const int now_hit = hit_at(x, y);
