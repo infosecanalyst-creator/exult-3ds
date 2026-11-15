@@ -1906,7 +1906,7 @@ extern "C" void N3DS_BottomOverlay(void* fbp, int fbw, int fbh) {
 			uint32_t* col = fb + x * fbw + (fbw - 1);
 			for (int y = 0; y < H; y++) {
 				uint32_t& d = *(col - y);
-				if (x >= MP_X && x < MP_X + MP_W && y >= MP_Y && y < MP_Y + MP_H) {
+				if (pm_open || (x >= MP_X && x < MP_X + MP_W && y >= MP_Y && y < MP_Y + MP_H)) {    // the START menu fills the screen
 					d = rgb32[s[y * lw + x]];
 				} else {
 					d = ((d >> 1) & 0x7F7F7F00) | 0xFF;    // dim the game behind
