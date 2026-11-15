@@ -235,6 +235,23 @@ namespace {
 		return static_cast<unsigned char>(best);
 	}
 
+	// nearest colour that is clearly blue (the game palette's plain nearest to 40,56,120 is a grey)
+	unsigned char nearest_blue(int r, int g, int b) {
+		int best = -1, bestd = 1 << 30;
+		for (int i = 0; i < 256; i++) {
+			const int cr = (rgb32[i] >> 24) & 255, cg = (rgb32[i] >> 16) & 255, cb = (rgb32[i] >> 8) & 255;
+			if (cb < cr + 30 || cb < cg + 20) {
+				continue;
+			}
+			const int d = (cr - r) * (cr - r) + (cg - g) * (cg - g) + (cb - b) * (cb - b);
+			if (d < bestd) {
+				bestd = d;
+				best  = i;
+			}
+		}
+		return best >= 0 ? static_cast<unsigned char>(best) : nearest(r, g, b);
+	}
+
 	void load_palette(Game_window* gwin) {
 		Palette*  pal = gwin->get_pal();
 		const int mx  = pal->get_max_val() > 0 ? pal->get_max_val() : 63;
@@ -245,9 +262,9 @@ namespace {
 		}
 		// house palette (claude/3ds-look-and-feel.md), matched to the game's 256 colours
 		C_BG       = nearest(8, 12, 40);
-		C_PANEL    = nearest(40, 56, 120);
+		C_PANEL    = nearest_blue(40, 56, 120);
 		C_PANEL_HI = nearest(220, 180, 60);
-		C_EDGE     = nearest(120, 150, 230);
+		C_EDGE     = nearest_blue(120, 150, 230);
 		C_RED      = 22;
 		C_GREEN    = 64;
 		C_BLUE     = 79;
@@ -1560,7 +1577,7 @@ namespace {
 			pm_button(1, "NO");
 		}
 		target->fill8(C_DIM, GAME_W, 16, 0, H - 16);    // hint strip
-		text_centered(0, lh("D-Pad: choose   A: select   B: back"), GAME_W / 2, H - 13, GAME_W - 8);
+		text_centered(0, lh("D-Pad: choose   A: select   B: back"), GAME_W / 2, H - 15, GAME_W - 8);
 	}
 
 	void pm_close() {
@@ -2026,6 +2043,10 @@ extern "C" u32 N3DS_KeyHook(u32 kDown, u32 kHeld) {
 	}
 	u32        taken = 0;
 	const bool l     = (kHeld & KEY_L) != 0;
+	if (kDown & KEY_ZL) {    // ZL swaps the screens at any time
+		pending_swap = true;
+		taken |= KEY_ZL;
+	}
 	// START port menu (house style). While it is open it takes the D-Pad, A, B and START.
 	// The screens swap with ZL only (L+START used to swap too).
 	if (pm_open) {
@@ -2055,10 +2076,6 @@ extern "C" u32 N3DS_KeyHook(u32 kDown, u32 kHeld) {
 		click3ds::play();
 		pm_show();
 		return taken | KEY_START;
-	}
-	if (kDown & KEY_ZL) {    // ZL swaps the screens at any time
-		pending_swap = true;
-		taken |= KEY_ZL;
 	}
 	if (l && (kDown & KEY_R) && !game_on_top) {    // L+R zooms the touchscreen
 		zoom      = (zoom + 1) % ZOOM_STEPS;

@@ -227,6 +227,7 @@ static void st_finish(const char* why) {
 // returns to the agent when the game does not quit within 15 s of the script's
 // end, when frames stop for 60 s (a hang), or after 30 minutes in all.
 static volatile u64 st_beat;
+static volatile u32 st_hang_ms = 60000;   // watchdog limit for a frame gap (script: hang SECS)
 static void st_watchdog(void* arg) {
     (void)arg;
     u64 last = 0, still = 0, doneAt = 0, start = osGetTime();
@@ -242,13 +243,22 @@ static void st_watchdog(void* arg) {
             why = "";
         } else {
             if (st_beat != last) { last = st_beat; still = now; }
-            else if (now - still > 60000) why = "watchdog: no frames for 60 s (the game hung)";
+            // before the first frame a big game may still be loading (FS2: ~40 s+ of data): allow 3 min
+            else if (now - still > (st_beat ? (u64)st_hang_ms : 180000)) why = st_beat ? "watchdog: no frames for the hang limit (the game hung)"
+                                                                            : "watchdog: no first frame within 3 min (the game hung while starting)";
             if (now - start > 30 * 60 * 1000) why = "watchdog: the test ran longer than 30 minutes";
         }
         if (why) {
             if (*why) st_logf("%s\n%s\n", why, st_done ? "" : "done frames=0 (stopped by the watchdog)");
             if (st_log) { fclose(st_log); st_log = NULL; }
             st_set_target();
+            if (!st_done) {
+                // A hung game is usually stuck waiting on the GPU. Ending it from here left the GPU hung,
+                // and every later launch froze on its first frame until a power-off; GSPGPU_ResetGpuCore()
+                // did not help (Nov 15 2026). So leave the hung game alone: its screen shows where it
+                // stopped, the log is closed, and a power-off is needed either way.
+                return;
+            }
             aptSetChainloaderToSelf();   // relaunch the Homebrew loader, which starts the agent
             aptExit();
             svcExitProcess();
@@ -355,7 +365,9 @@ static void st_step(void) {
             st_waitCol = strtol(col, NULL, 16); st_waitMax = mx; st_waitDone = 0;
             return;
         }
-        if (!strcmp(cmd, "hang")) continue;   // the emulator suite checks hangs; here the agent times out
+        if (!strcmp(cmd, "hang")) {            // hang SECS: frames may stop this long (loading) before the watchdog acts; 0 = 60 s
+            int sec = atoi(a1); st_hang_ms = (sec > 0 ? sec : 60) * 1000; continue;
+        }
         if (!strcmp(cmd, "end")) break;
     }
     st_finish("end of script");
