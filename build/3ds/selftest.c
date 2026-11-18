@@ -226,6 +226,7 @@ static void st_finish(const char* why) {
 // Watchdog thread: nobody has to look after the 3DS. It ends the game and
 // returns to the agent when the game does not quit within 15 s of the script's
 // end, when frames stop for 60 s (a hang), or after 30 minutes in all.
+extern void n3ds_selftest_quit(void) __attribute__((weak));   // n3ds_bottom.cc
 static volatile u64 st_beat;
 static volatile u32 st_hang_ms = 60000;   // watchdog limit for a frame gap (script: hang SECS)
 static void st_watchdog(void* arg) {
@@ -239,7 +240,14 @@ static void st_watchdog(void* arg) {
             // End the game ourselves as soon as the script is done. Asking it to
             // quit (aptMainLoop false) crashed ScummVM on the real 3DS: its input
             // thread still read the buttons after HID was shut down (Nov 13 2026).
-            if (!doneAt) doneAt = now;
+            if (!doneAt) {
+                doneAt = now;
+                // Exult: ask the game to quit the normal way first (Nov 18 2026). Ended from this
+                // thread with svcExitProcess, its memory was not given back and the next program got
+                // ~1 MB of heap. Fall back to ending it after 20 s.
+                if (n3ds_selftest_quit) n3ds_selftest_quit();
+            }
+            if (now - doneAt < 20000) continue;
             why = "";
         } else {
             if (st_beat != last) { last = st_beat; still = now; }
@@ -400,7 +408,8 @@ void __wrap_hidScanInput(void) {
     }
     st_step();
 }
-bool __wrap_aptMainLoop(void) {   // the watchdog ends the game after the script; no quit request
+bool __wrap_aptMainLoop(void) {   // Exult: also ask to quit here when the script is done (frontend loop)
+    if (st_done) return false;
     return __real_aptMainLoop();
 }
 u32 __wrap_hidKeysHeld(void) { return st_on == 1 ? st_held : __real_hidKeysHeld(); }

@@ -2500,3 +2500,8 @@ extern "C" int N3DS_BottomTouch(int phase, int x, int y, float* nx, float* ny) {
 	}
 	return 1;
 }
+
+// Test agent: the script is done, quit the normal way (as EXIT GAME -> YES does).
+extern "C" void n3ds_selftest_quit(void) {
+	quitting_time = QUIT_TIME_YES;
+}
