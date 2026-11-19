@@ -1572,7 +1572,7 @@ namespace {
 			}
 		} else {
 			text_centered(0, "Exit Ultima VII?", GAME_W / 2, 70, GAME_W - 16);
-			text_centered(0, "The game is quicksaved first.", GAME_W / 2, 90, GAME_W - 16);
+			text_centered(0, "It is quicksaved first when it can be.", GAME_W / 2, 90, GAME_W - 16);
 			pm_button(0, "YES");
 			pm_button(1, "NO");
 		}
