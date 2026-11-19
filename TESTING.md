@@ -5,7 +5,7 @@ Notes from development and testing. The build is tested in the Azahar emulator (
 ## Touch-first layout (Oct 26-27)
 - **Why:** on hardware, copying the top screen into a live view on the bottom lagged badly. The game now runs on the touchscreen at 320x240, pixel for pixel, and the top screen is a dashboard. "Runs a lot faster" on hardware.
 - **Display:** SDL copies the middle 320 columns of the 400x240 window to the bottom screen, or a zoomed rectangle (`N3DS_BottomView`). Overlays (menu button, menu, answer buttons) are drawn after the copy (`N3DS_BottomOverlay`). Taps map 1:1, including with zoom.
-- **Swap (L+START):** game back on top (32-bit, double-buffered, 3D), dashboard on the bottom (RGB565).
+- **Swap (ZL):** game back on top (32-bit, double-buffered, 3D), dashboard on the bottom (RGB565).
 - **Exult's menus and title scenes:** laid out in the 320-pixel middle (single-column game picker; scenes centred, not stretched).
 - **Top-screen views:** conversations (portrait at 2x and words; answers as buttons below), books, scrolls, signs (runes plus plain letters), world map (BG), party stats.
 - **Flicker fix:** the overlay is drawn once per game frame. Pending changes are presented directly only when the game is paused.

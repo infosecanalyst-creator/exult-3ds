@@ -91,7 +91,7 @@ The full instruction manual is in the game: press **L+Y**, or tap the menu butto
   - Spells, Notes, Map, Stats, Keys, Food, Target, Combat, Save;
   - the Manual, Swap screens and Game menu.
 - **L+R zooms** the touchscreen to 1.5× or 2× around the Avatar. Taps still land where you touch.
-- **ZL swaps the screens (L+START also works).** The game goes on top, where the 3D slider works, and fills all 400×240 of it (Exult draws a wider view, nothing is stretched). The dashboard comes down, and the touchscreen works like a touchpad for the cursor.
+- **ZL swaps the screens.** The game goes on top, where the 3D slider works, and fills all 400×240 of it (Exult draws a wider view, nothing is stretched). The dashboard comes down, and the touchscreen works like a touchpad for the cursor.
 - First-time tips appear on the top screen the first time each is relevant.
 
 ### Buttons
@@ -110,7 +110,6 @@ The full instruction manual is in the game: press **L+Y**, or tap the menu butto
 | ZL / ZR | Swap screens / Target |
 | START | Game menu (save, load, options), or close windows |
 | SELECT | Quicksave |
-| L+START | Swap screens (same as ZL) |
 | L+Y | Manual |
 | Hold L + D-Pad | ↑ Watch · ↓ Pause combat · ← Lockpick · → Food |
 | L+SELECT / L+X | Quick-restore / Next music track |
