@@ -10,7 +10,7 @@ This is Exult, the engine that runs Ultima VII on modern machines, made for the 
 It plays The Black Gate (with Forge of Virtue) and Serpent Isle (with The Silver Seed), using your own copy of the game.
 
 ## Reading this manual
-- Scroll: Circle Pad or C-Stick up and down. Hold to keep scrolling.
+- Scroll: Circle Pad or C-Stick up and down. Hold to keep scrolling. You can also drag the stylus up or down.
 - Sections: tap one on the touchscreen, or move between them with the D-Pad.
 - Previous and next section: L and R.
 - B or Start: close. The manual opens again where you left it.

@@ -1410,6 +1410,14 @@ namespace {
 		return (H - 16 - MAN_TOP) / MAN_LH;
 	}
 
+	// drag to scroll (rule 13): start point, remainder below one line, momentum
+	int   man_x0 = 0, man_y0 = 0, man_ylast = 0, man_acc = 0;
+	bool  man_drag = false;
+	float man_mom  = 0;
+	void man_drag_steps() {
+		while (man_acc >= MAN_LH) { manual_scroll_by(1); man_acc -= MAN_LH; }
+		while (man_acc <= -MAN_LH) { manual_scroll_by(-1); man_acc += MAN_LH; }
+	}
 	void manual_scroll_by(int d) {
 		manual_layout(help_page);
 		const int maxs = std::max(0, static_cast<int>(manual_lines.size()) - manual_rows());
@@ -2145,6 +2153,11 @@ extern "C" u32 N3DS_KeyHook(u32 kDown, u32 kHeld) {
 			manual_scroll_by(dir);
 			last_step = now;
 		}
+		if (!(kHeld & KEY_TOUCH) && (man_mom > 0.5f || man_mom < -0.5f)) {   // coast after a drag
+			man_acc += static_cast<int>(man_mom * 2.0f);
+			man_mom *= 0.88f;
+			man_drag_steps();
+		}
 		// D-Pad: move through the two-column grid of section buttons.
 		int step = 0;
 		if (kDown & KEY_DLEFT) {
@@ -2457,6 +2470,32 @@ extern "C" int N3DS_BottomTouch(int phase, int x, int y, float* nx, float* ny) {
 	}
 	if (!touch_ui) {
 		return to_game();
+	}
+	// Manual: a touch that moves more than 6 px drags the text (rule 13) and presses nothing.
+	if (menu_open && help_page >= 0 && !pm_open) {
+		if (phase == 0) {
+			man_x0 = x; man_y0 = y; man_ylast = y; man_drag = false; man_acc = 0; man_mom = 0;
+		} else if (phase == 1) {
+			if (!man_drag && (std::abs(x - man_x0) > 6 || std::abs(y - man_y0) > 6)) {
+				man_drag     = true;
+				pressed_id   = -1;
+				touch_hit    = -1;
+				menu_dirty   = true;
+				overlay_dirty = true;
+			}
+			if (man_drag) {
+				man_acc += man_ylast - y;
+				man_mom = static_cast<float>(man_ylast - y);
+				man_drag_steps();
+				man_ylast = y;
+				return 1;
+			}
+			man_ylast = y;
+		} else if (phase == 2 && man_drag) {
+			man_drag = false;
+			touch_ui = false;
+			return 1;
+		}
 	}
 	if (phase == 2) {
 		if (!menu_open) {
