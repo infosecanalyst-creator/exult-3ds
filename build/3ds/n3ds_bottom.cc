@@ -32,6 +32,7 @@
 #include "chunkter.h"
 #include "combat_opts.h"
 #include "conversation.h"
+#include "effects.h"
 #include "exult.h"
 #include "exult_constants.h"
 #include "game.h"
@@ -2258,6 +2259,46 @@ void n3ds_bottom_tick() {
 				std::printf("[exult-3ds] %s\n", wr);
 			}
 			last_flush = now;    // the log itself is written by its background thread
+		}
+	}
+	// UI rule 14 (critical info where the eyes are): party health and status are on the
+	// dashboard, the other screen, so when someone becomes badly hurt, poisoned or
+	// paralyzed the game also says so in its own centred text, on whichever screen the
+	// game is (it moves with ZL). Words, so colour is never the only signal (rule 20).
+	{
+		static uint64_t last_check = 0, last_alert = 0;
+		static std::unordered_map<const Actor*, int> prev;    // 1 badly hurt, 2 poisoned, 4 paralyzed
+		if (now - last_check > 250) {
+			last_check = now;
+			std::string msg;
+			std::unordered_map<const Actor*, int> cur;
+			for (Actor* a : party_members(gwin)) {
+				const int hp = a->get_effective_prop(Actor::health), maxhp = a->get_effective_prop(Actor::strength);
+				int st = 0;
+				if (maxhp > 0 && hp * 4 <= maxhp) {
+					st |= 1;
+				}
+				if (a->get_flag(Obj_flags::poisoned)) {
+					st |= 2;
+				}
+				if (a->get_flag(Obj_flags::paralyzed)) {
+					st |= 4;
+				}
+				cur[a]          = st;
+				const auto it   = prev.find(a);
+				const int  was  = it == prev.end() ? st : it->second;    // no alert for how a game loads
+				const int  news = st & ~was;
+				if (news && msg.empty()) {
+					msg = a->get_name() + ((news & 1) ? " is badly hurt!" : (news & 2) ? " is poisoned!" : " is paralyzed!");
+				}
+			}
+			if (msg.empty() || now - last_alert > 1500) {    // a held-back alert is tried again next time
+				if (!msg.empty()) {
+					gwin->get_effects()->center_text(msg.c_str());
+					last_alert = now;
+				}
+				prev.swap(cur);
+			}
 		}
 	}
 	if (pending_map) {
