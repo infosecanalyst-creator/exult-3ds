@@ -1572,7 +1572,7 @@ namespace {
 			}
 		} else {
 			text_centered(0, "Exit Ultima VII?", GAME_W / 2, 70, GAME_W - 16);
-			text_centered(0, "Progress since your last save is lost.", GAME_W / 2, 90, GAME_W - 16);
+			text_centered(0, "The game is quicksaved first.", GAME_W / 2, 90, GAME_W - 16);
 			pm_button(0, "YES");
 			pm_button(1, "NO");
 		}
@@ -2018,6 +2018,29 @@ static void pm_act(int i) {
 		}
 	} else if (i == 0) {
 		set_menu(false);
+		// Rule 17 (never lose progress): quicksave into the game in progress first
+		// (what SELECT and the 15-minute autosave do), unless a conversation, an open
+		// gump or a fight makes saving unsafe right now.
+		{
+			Game_window*  gw = Game_window::get_instance();
+			Conversation* cv = nullptr;
+			if (gw) {
+				if (Usecode_machine* uc = gw->get_usecode()) {
+					cv = uc->get_conversation();
+				}
+			}
+			Gump_manager* gm   = gw ? gw->get_gump_man() : nullptr;
+			const bool    busy = !gw || (gm && gm->showing_gumps()) || gw->in_combat()
+			                     || (cv && (cv->get_num_faces_on_screen() > 0 || cv->are_choices_active()));
+			if (!busy) {
+				try {
+					gw->write();
+					std::printf("[exult-3ds] quicksave on exit\n");
+				} catch (...) {
+					std::printf("[exult-3ds] quicksave on exit failed\n");
+				}
+			}
+		}
 		quitting_time = QUIT_TIME_YES;             // already asked here: no second prompt
 	} else {
 		pm_page  = 0;
