@@ -43,7 +43,7 @@ The touchscreen shows the game, pixel for pixel. Everything you do happens here,
 The top screen never needs touching.
 | Party | A portrait for each member, a red health bar and a blue mana bar.
 | Tags | PSN poisoned, FOOD hungry, STRV starving, ZZ asleep, PAR paralyzed, CHM charmed.
-| Minimap | The land around you. You are white, the party green, people yellow, foes red. The box is what the touchscreen shows.
+| Minimap | The land around you. You are white, the party green, people yellow, foes a red X. The box is what the touchscreen shows.
 | Info | The day and time, COMBAT while fighting, what the stylus or cursor is on, problems like "Iolo is hungry", and recent messages.
 
 The top screen also takes over to show the world map, the party's stats, conversations, books, scrolls and signs.

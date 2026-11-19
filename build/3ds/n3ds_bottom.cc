@@ -653,7 +653,15 @@ namespace {
 				const int  al    = a->get_effective_alignment();
 				const bool party = a->get_flag(Obj_flags::in_party);
 				const bool foe   = al == Actor::evil || al == Actor::chaotic;
-				dot(px, py, party ? C_GREEN : foe ? C_RED : C_YELLOW, 2);
+				if (foe && !party) {    // UI rule 20: a foe is a red X, not just a red dot
+					target->fill8(C_BG, 6, 6, px - 2, py - 2);
+					for (int k = 0; k < 4; k++) {
+						target->fill8(C_RED, 1, 1, px - 1 + k, py - 1 + k);
+						target->fill8(C_RED, 1, 1, px + 2 - k, py - 1 + k);
+					}
+				} else {
+					dot(px, py, party ? C_GREEN : C_YELLOW, 2);
+				}
 			}
 		}
 		int ax, ay;
@@ -1226,8 +1234,8 @@ namespace {
 			  "STRV starving  ZZ asleep",
 			  "PAR paralyzed  CHM charmed",
 			  "Minimap: you white, party green,",
-			  "people yellow, foes red. The box is",
-			  "what the game screen shows.", nullptr}},
+			  "people yellow, foes a red X. The",
+			  "box is what the game screen shows.", nullptr}},
 			{"Buttons",
 			 0,
 			 {"Circle Pad walk    C-Stick cursor",
