@@ -1414,14 +1414,14 @@ namespace {
 	int   man_x0 = 0, man_y0 = 0, man_ylast = 0, man_acc = 0;
 	bool  man_drag = false;
 	float man_mom  = 0;
-	void man_drag_steps() {
-		while (man_acc >= MAN_LH) { manual_scroll_by(1); man_acc -= MAN_LH; }
-		while (man_acc <= -MAN_LH) { manual_scroll_by(-1); man_acc += MAN_LH; }
-	}
 	void manual_scroll_by(int d) {
 		manual_layout(help_page);
 		const int maxs = std::max(0, static_cast<int>(manual_lines.size()) - manual_rows());
 		manual_scroll  = std::clamp(manual_scroll + d, 0, maxs);
+	}
+	void man_drag_steps() {
+		while (man_acc >= MAN_LH) { manual_scroll_by(1); man_acc -= MAN_LH; }
+		while (man_acc <= -MAN_LH) { manual_scroll_by(-1); man_acc += MAN_LH; }
 	}
 
 	void draw_manual() {
