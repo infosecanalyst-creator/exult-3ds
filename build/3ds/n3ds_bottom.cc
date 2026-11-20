@@ -53,6 +53,9 @@
 #include "vgafile.h"
 #include "manual_text.h"
 #include "click3ds.h"
+#include "utils.h"
+#include <dirent.h>
+#include <sys/stat.h>
 
 #ifdef __GNUC__
 #	pragma GCC diagnostic push
@@ -1539,7 +1542,8 @@ namespace {
 	// ---- START port menu (house style, claude/3ds-look-and-feel.md) -----------------
 	enum { ID_PM = 600 };
 	bool pm_open  = false;
-	int  pm_page  = 0;    // 0 items, 1 exit confirm
+	int  pm_page  = 0;    // 0 items, 1 exit confirm, 2 exit save failed or not possible (EX-03)
+	bool pm_cant_save = false;   // page 2: true = unsafe moment (talk, fight, open window), false = write failed
 	int  pm_focus = 0;
 	enum { PM_RESUME, PM_MANUAL, PM_SAVE, PM_OPTIONS, PM_COMMANDS, PM_LEFTY, PM_EXIT, PM_COUNT };
 	const char* const pm_labels[PM_COUNT] = {"RESUME", "MANUAL", "SAVE / LOAD", "GAME OPTIONS", "COMMANDS", "", "EXIT GAME"};
@@ -1588,10 +1592,18 @@ namespace {
 				pm_button(i, i == PM_LEFTY ? (g_lefty ? "LEFT HAND: ON" : "LEFT HAND: OFF") : pm_labels[i]);
 			}
 		} else {
-			text_centered(0, "Exit Ultima VII?", GAME_W / 2, 70, GAME_W - 16);
-			text_centered(0, "It is quicksaved first when it can be.", GAME_W / 2, 90, GAME_W - 16);
-			pm_button(0, "YES");
-			pm_button(1, "NO");
+			if (pm_page == 2) {
+				text_centered(0, "Not saved!", GAME_W / 2, 60, GAME_W - 16);
+				text_centered(0, pm_cant_save ? "Can't save during a talk, a fight" : "The save failed (SD card full?).", GAME_W / 2, 80, GAME_W - 16);
+				text_centered(0, pm_cant_save ? "or with a window open. Exit anyway?" : "Exit anyway? Progress is lost.", GAME_W / 2, 96, GAME_W - 16);
+				pm_button(0, "EXIT ANYWAY");
+				pm_button(1, "NO");
+			} else {
+				text_centered(0, "Exit Ultima VII?", GAME_W / 2, 70, GAME_W - 16);
+				text_centered(0, "It is quicksaved first when it can be.", GAME_W / 2, 90, GAME_W - 16);
+				pm_button(0, "YES");
+				pm_button(1, "NO");
+			}
 		}
 		target->fill8(C_DIM, GAME_W, 16, 0, H - 16);    // hint strip
 		text_centered(0, lh("D-Pad: choose   A: select   B: back"), GAME_W / 2, H - 15, GAME_W - 8);
@@ -2003,6 +2015,35 @@ extern "C" u32 N3DS_Remap(u32 m) {
 }
 
 // Buttons taken for the layout's own UI.
+// EX-01: copy every file of the current gamedat into gamedat.bak (overwriting the
+// previous copy file by file; no rename). False if any copy failed.
+static bool backup_gamedat() {
+	std::string src = get_system_path("<GAMEDAT>");
+	while (!src.empty() && (src.back() == '/' || src.back() == '\\')) src.pop_back();
+	const std::string dst = src + ".bak";
+	DIR* d = opendir(src.c_str());
+	if (!d) return true;                           // nothing to protect yet
+	mkdir(dst.c_str(), 0777);
+	bool ok = true;
+	std::vector<char> buf(32 * 1024);
+	while (dirent* e = readdir(d)) {
+		if (e->d_name[0] == '.') continue;
+		const std::string from = src + "/" + e->d_name, to = dst + "/" + e->d_name;
+		FILE* in = std::fopen(from.c_str(), "rb");
+		if (!in) continue;                         // a subfolder or unreadable entry
+		FILE* out = std::fopen(to.c_str(), "wb");
+		if (!out) { std::fclose(in); ok = false; break; }
+		size_t n;
+		while ((n = std::fread(buf.data(), 1, buf.size(), in)) > 0)
+			if (std::fwrite(buf.data(), 1, n, out) != n) { ok = false; break; }
+		std::fclose(in);
+		if (std::fclose(out) != 0) ok = false;
+		if (!ok) break;
+	}
+	closedir(d);
+	return ok;
+}
+
 // START port menu: act on item i of the current page
 static void pm_act(int i) {
 	if (pm_page == 0) {
@@ -2033,8 +2074,15 @@ static void pm_act(int i) {
 			pm_focus = 1;                          // the focus starts on NO
 			break;
 		}
+	} else if (pm_page == 2) {
+		if (i == 0) {                              // EXIT ANYWAY
+			set_menu(false);
+			quitting_time = QUIT_TIME_YES;
+		} else {
+			pm_page  = 0;
+			pm_focus = PM_EXIT;
+		}
 	} else if (i == 0) {
-		set_menu(false);
 		// Rule 17 (never lose progress): quicksave into the game in progress first
 		// (what SELECT and the 15-minute autosave do), unless a conversation, an open
 		// gump or a fight makes saving unsafe right now.
@@ -2049,15 +2097,34 @@ static void pm_act(int i) {
 			Gump_manager* gm   = gw ? gw->get_gump_man() : nullptr;
 			const bool    busy = !gw || (gm && gm->showing_gumps()) || gw->in_combat()
 			                     || (cv && (cv->get_num_faces_on_screen() > 0 || cv->are_choices_active()));
+			bool saved = false;
 			if (!busy) {
-				try {
-					gw->write();
-					std::printf("[exult-3ds] quicksave on exit\n");
-				} catch (...) {
-					std::printf("[exult-3ds] quicksave on exit failed\n");
+				// EX-01: gamedat is rewritten in place, so keep a copy of the last good
+				// one as gamedat.bak first (boot falls back to it if gamedat is broken).
+				// No copy, no write: a full card would leave gamedat half-written.
+				if (backup_gamedat()) {
+					try {
+						gw->write();
+						saved = true;
+						std::printf("[exult-3ds] quicksave on exit\n");
+					} catch (...) {
+						std::printf("[exult-3ds] quicksave on exit failed\n");
+					}
+				} else {
+					std::printf("[exult-3ds] gamedat backup failed: not saving\n");
 				}
 			}
+			if (!saved) {                          // EX-03: never quit silently without the save
+				pm_cant_save = busy;
+				pm_page      = 2;
+				pm_focus     = 1;                  // focus on NO
+				menu_dirty    = true;
+				overlay_dirty = true;
+				last_draw     = 0;
+				return;
+			}
 		}
+		set_menu(false);
 		quitting_time = QUIT_TIME_YES;             // already asked here: no second prompt
 	} else {
 		pm_page  = 0;
@@ -2093,7 +2160,7 @@ extern "C" u32 N3DS_KeyHook(u32 kDown, u32 kHeld) {
 		const int n = pm_count();
 		if (kDown & (KEY_B | KEY_START)) {
 			click3ds::play();
-			if (pm_page == 1) {
+			if (pm_page != 0) {
 				pm_page  = 0;
 				pm_focus = PM_EXIT;
 			} else {
@@ -2101,7 +2168,7 @@ extern "C" u32 N3DS_KeyHook(u32 kDown, u32 kHeld) {
 			}
 		} else if (pm_page == 0 && (kDown & (KEY_DUP | KEY_DDOWN))) {
 			pm_focus = (pm_focus + ((kDown & KEY_DDOWN) ? 1 : n - 1)) % n;
-		} else if (pm_page == 1 && (kDown & (KEY_DLEFT | KEY_DRIGHT | KEY_DUP | KEY_DDOWN))) {
+		} else if (pm_page != 0 && (kDown & (KEY_DLEFT | KEY_DRIGHT | KEY_DUP | KEY_DDOWN))) {
 			pm_focus = 1 - pm_focus;
 		} else if (kDown & KEY_A) {
 			click3ds::play();

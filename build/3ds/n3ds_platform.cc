@@ -688,6 +688,9 @@ __attribute__((constructor(101))) static void n3ds_early_init() {
 				}
 			}
 		}
+		// EX-01: no usable gamedat, but a backup from the last exit save: use it.
+		if (stat(dir.c_str(), &st) != 0 && file_exists((dir + ".bak/identity").c_str()))
+			rename((dir + ".bak").c_str(), dir.c_str());
 	}
 
 	if (!file_exists(N3DS_HOME "/exult.cfg")) {
