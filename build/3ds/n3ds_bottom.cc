@@ -2044,6 +2044,59 @@ static bool backup_gamedat() {
 	return ok;
 }
 
+// The exit save (EXIT GAME -> YES, and HOME -> Close, EX-04): quicksave into the game in
+// progress unless a conversation, an open gump or a fight makes saving unsafe right now
+// (*busy is then true and nothing is written). EX-01: gamedat is rewritten in place, so a
+// copy of the last good one is kept as gamedat.bak first (boot falls back to it if gamedat
+// is broken); no copy, no write: a full card would leave gamedat half-written.
+static bool exit_quicksave(bool* busy_out) {
+	Game_window*  gw = Game_window::get_instance();
+	Conversation* cv = nullptr;
+	if (gw) {
+		if (Usecode_machine* uc = gw->get_usecode()) {
+			cv = uc->get_conversation();
+		}
+	}
+	Gump_manager* gm   = gw ? gw->get_gump_man() : nullptr;
+	const bool    busy = !gw || !gw->get_main_actor() || (gm && gm->showing_gumps()) || gw->in_combat()
+	                     || (cv && (cv->get_num_faces_on_screen() > 0 || cv->are_choices_active()));
+	*busy_out = busy;
+	if (busy) return false;
+	if (!backup_gamedat()) {
+		std::printf("[exult-3ds] gamedat backup failed: not saving\n");
+		return false;
+	}
+	try {
+		gw->write();
+		std::printf("[exult-3ds] quicksave on exit\n");
+		return true;
+	} catch (...) {
+		std::printf("[exult-3ds] quicksave on exit failed\n");
+		return false;
+	}
+}
+
+// EX-04: HOME -> Close. SDL's 3DS event pump turns the close request into SDL_EVENT_QUIT,
+// which Exult answers with its own "Do you really want to quit?" box - drawn where nobody
+// can see it any more, so the 3DS hung on Close. This watch sees the event as it is pushed
+// (on the main thread, from the same input polling the START menu runs in): in a game it
+// makes the exit save above and sets quitting_time, so the box closes at once (its loop
+// ends when quitting_time is set) and Exult leaves the normal way. Exult's own menus
+// handle the event themselves (they return at once on it).
+static bool quit_watch(void*, SDL_Event* e) {
+	static bool handled = false;
+	if (e->type != SDL_EVENT_QUIT || handled || quitting_time != QUIT_TIME_NO) return true;
+	Game_window* gw = Game_window::get_instance();
+	if (!gw || !gw->get_main_actor()) return true;
+	handled          = true;
+	bool       busy  = false;
+	const bool saved = exit_quicksave(&busy);
+	std::printf("[exult-3ds] close requested (HOME -> Close): %s\n",
+				saved ? "saved" : busy ? "not saved (talk, fight or window open)" : "not saved (write failed)");
+	quitting_time = QUIT_TIME_YES;
+	return true;
+}
+
 // START port menu: act on item i of the current page
 static void pm_act(int i) {
 	if (pm_page == 0) {
@@ -2084,36 +2137,11 @@ static void pm_act(int i) {
 		}
 	} else if (i == 0) {
 		// Rule 17 (never lose progress): quicksave into the game in progress first
-		// (what SELECT and the 15-minute autosave do), unless a conversation, an open
-		// gump or a fight makes saving unsafe right now.
+		// (exit_quicksave: what SELECT and the 15-minute autosave do), unless a
+		// conversation, an open gump or a fight makes saving unsafe right now.
 		{
-			Game_window*  gw = Game_window::get_instance();
-			Conversation* cv = nullptr;
-			if (gw) {
-				if (Usecode_machine* uc = gw->get_usecode()) {
-					cv = uc->get_conversation();
-				}
-			}
-			Gump_manager* gm   = gw ? gw->get_gump_man() : nullptr;
-			const bool    busy = !gw || (gm && gm->showing_gumps()) || gw->in_combat()
-			                     || (cv && (cv->get_num_faces_on_screen() > 0 || cv->are_choices_active()));
-			bool saved = false;
-			if (!busy) {
-				// EX-01: gamedat is rewritten in place, so keep a copy of the last good
-				// one as gamedat.bak first (boot falls back to it if gamedat is broken).
-				// No copy, no write: a full card would leave gamedat half-written.
-				if (backup_gamedat()) {
-					try {
-						gw->write();
-						saved = true;
-						std::printf("[exult-3ds] quicksave on exit\n");
-					} catch (...) {
-						std::printf("[exult-3ds] quicksave on exit failed\n");
-					}
-				} else {
-					std::printf("[exult-3ds] gamedat backup failed: not saving\n");
-				}
-			}
+			bool       busy  = false;
+			const bool saved = exit_quicksave(&busy);
 			if (!saved) {                          // EX-03: never quit silently without the save
 				pm_cant_save = busy;
 				pm_page      = 2;
@@ -2274,7 +2302,9 @@ extern "C" u32 N3DS_KeyHook(u32 kDown, u32 kHeld) {
 	return taken;
 }
 
-void n3ds_bottom_init() {}
+void n3ds_bottom_init() {
+	SDL_AddEventWatch(quit_watch, nullptr);    // EX-04
+}
 
 void n3ds_bottom_tick();
 

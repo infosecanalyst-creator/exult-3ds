@@ -409,7 +409,12 @@ void __wrap_hidScanInput(void) {
     st_step();
 }
 bool __wrap_aptMainLoop(void) {   // Exult: also ask to quit here when the script is done (frontend loop)
-    if (st_done) return false;
+    if (st_done) {
+        // quit as EXIT GAME -> YES does, before SDL turns this into a close request
+        // (n3ds_bottom.cc's HOME -> Close handling would quicksave the game: EX-04)
+        if (n3ds_selftest_quit) n3ds_selftest_quit();
+        return false;
+    }
     return __real_aptMainLoop();
 }
 u32 __wrap_hidKeysHeld(void) { return st_on == 1 ? st_held : __real_hidKeysHeld(); }

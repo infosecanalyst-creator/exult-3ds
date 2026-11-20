@@ -72,6 +72,9 @@ void __system_allocateHeaps(void) {
 		if (maxCommit - currentCommit >= (64ll << 20)) {
 			break;
 		}
+		if (maxCommit < (64ll << 20)) {
+			break;    // EX-13: never that much (an original 3DS): no use waiting
+		}
 		svcSleepThread(10000000LL);
 	}
 	svcCloseHandle(reslimit);
@@ -659,7 +662,49 @@ extern "C" void n3ds_sd_report(char* out, unsigned n) {
 			 sdm_close_t / 268111856.0, sdm_slow);
 }
 
+// EX-13: Exult needs a New 3DS (memory and the 804 MHz CPU). On an original 3DS/2DS say so
+// on both screens and go back to the Homebrew Menu, instead of running out of memory later.
+static void require_new3ds() {
+	bool is_new = false;
+	if (R_FAILED(APT_CheckNew3DS(&is_new)) || is_new) {
+		return;
+	}
+	gfxInitDefault();
+	PrintConsole top, bot;
+	consoleInit(GFX_TOP, &top);
+	consoleInit(GFX_BOTTOM, &bot);
+	// The console font is 8x8: 50 columns on top, 40 below (every line here fits in 38).
+	static const char* const lines[] = {
+			"Exult (Ultima VII) needs a New 3DS",
+			"(New 3DS, New 3DS XL or New 2DS XL).",
+			"",
+			"This is an original 3DS or 2DS: it",
+			"lacks the memory and CPU speed the",
+			"game needs.",
+			"",
+			"Press START to go back.",
+	};
+	for (int sc = 0; sc < 2; sc++) {
+		consoleSelect(sc ? &bot : &top);
+		const int cols = sc ? 40 : 50;
+		printf("\x1b[9;1H");
+		for (const char* l : lines) {
+			printf("%*s%s\n", (cols - static_cast<int>(strlen(l))) / 2, "", l);
+		}
+	}
+	while (aptMainLoop()) {
+		hidScanInput();
+		if (hidKeysDown() & (KEY_START | KEY_A | KEY_B)) {
+			break;
+		}
+		gspWaitForVBlank();
+	}
+	gfxExit();
+	_exit(0);
+}
+
 __attribute__((constructor(101))) static void n3ds_early_init() {
+	require_new3ds();
 	osSetSpeedupEnable(true);    // New 3DS: 804 MHz + L2 cache
 	std::set_terminate(n3ds_terminate);
 	std::set_new_handler(n3ds_out_of_memory);
