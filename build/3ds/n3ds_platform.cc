@@ -40,6 +40,8 @@
 #include <vector>
 #include <cxxabi.h>
 
+#include "click3ds.h"
+
 #define N3DS_HOME "sdmc:/3ds/exult"
 
 // Heap layout. libctru's default gives the normal heap only 24 MB, which is
@@ -292,6 +294,10 @@ static void n3ds_terminate() {
 	fprintf(stderr, "\n[exult-3ds] FATAL: uncaught exception %s: %s (heap used %d MB)\n", type.c_str(), what,
 			n3ds_heap_used_mb());
 	fflush(stderr);
+	// _exit skips atexit, where the click gives its ndsp reference back: drop it here, or the DSP
+	// thread may fault in ndspiReadChnState once the heap its stack lives in is freed (the JA2
+	// exit crash, Nov 20 2026). shutdown() does nothing if the click never started or already stopped.
+	click3ds::shutdown();
 	_exit(1);
 }
 
