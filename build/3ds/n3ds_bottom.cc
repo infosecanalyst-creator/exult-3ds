@@ -118,7 +118,7 @@ static const char* lh(const char* s) {
 		{"Need a sextant to see where you are.  B: close", "Need a sextant to see where you are.  D-Down: close"},
 		{"D-Pad down or B: close", "B or D-Down: close"},
 		{"D-Pad < >  pages      B  close", "X / A  pages      D-Down  close"},
-		{"D-Pad: up/down scroll, left/right section.  B: close", "Y / B scroll, X / A section.  D-Down: close"},
+		{"Sticks: scroll   D-Pad, L / R: section   B / START: close", "Sticks: scroll   A/B/X/Y, L / R: section   D-Down / START: close"},
 	};
 	if (!g_lefty_loaded) lefty_load();
 	if (!g_lefty || !s) return s;
@@ -1488,7 +1488,7 @@ namespace {
 			target->fill8(C_EDGE, 3, th, PW - 5, ty);
 		}
 		target->fill8(C_PANEL, PW, 16, 0, H - 16);
-		text_centered(0, lh("Sticks: scroll.  D-Pad: pick a section.  L/R: section.  B: close"), PW / 2, H - 14, PW - 8);
+		text_centered(0, lh("Sticks: scroll   D-Pad, L / R: section   B / START: close"), PW / 2, H - 14, PW - 8);
 	}
 
 	// ---- Menu pop-up -----------------------------------------------------------
