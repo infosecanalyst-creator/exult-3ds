@@ -12,14 +12,16 @@ SERVER_OBJS := server/objserial.o server/servemsg.o server/server.o
 THREEDS_OBJS := 3ds/n3ds_platform.o 3ds/n3ds_bottom.o 3ds/n3ds_stereo.o 3ds/n3ds_frontend.o 3ds/selftest.o
 OBJS     += $(THREEDS_OBJS)
 
-CPPFLAGS := -D__3DS__ -DN3DS_PORT -DVERSION=\"$(VERSION)\" -DEXULT_DATADIR=\"sdmc:/3ds/exult/data\" \
+# PORT_VERSION: git describe of exult-3ds (build.sh passes it), shown in the START menu
+PORT_VERSION ?= unknown
+CPPFLAGS := -D__3DS__ -DN3DS_PORT -DVERSION=\"$(VERSION)\" -DPORT_VERSION=\"$(PORT_VERSION)\" -DEXULT_DATADIR=\"sdmc:/3ds/exult/data\" \
 	-DHAVE_SYS_TYPES_H=1 -DHAVE_SYS_TIME_H=1 -DHAVE_SYS_SOCKET_H=0 -DHAVE_NETDB_H=0 \
 	-DHAVE_SNPRINTF -DUSE_FMOPL_MIDI -DHAVE_ZIP_SUPPORT -DUSE_XBR_SCALER \
 	-I. -Iaudio -Iaudio/midi_drivers -Iconf -Idata -Ifiles -Ifiles/zip -Igamemgr -Igumps \
 	-Iheaders -Iimagewin -Iobjs -Ipathfinder -Iserver -Ishapes -Itools -Iusecode -Ishapes/shapeinf -I3ds -Iusecode -Igumps \
 	-I$(DEPS)/include -I$(P3DS)/include -I$(CTRU)/include
-CXXFLAGS := -std=gnu++17 -O2 -g0 $(ARCH) -ffunction-sections -fdata-sections -w -MMD
-CFLAGS   := -O2 $(ARCH) -ffunction-sections -w -MMD
+CXXFLAGS := -std=gnu++17 -O2 -g0 $(ARCH) -ffunction-sections -fdata-sections -MMD
+CFLAGS   := -O2 $(ARCH) -ffunction-sections -MMD
 LDFLAGS  := -specs=3dsx.specs $(ARCH) -Wl,--gc-sections
 # Hardware test hooks (3ds-test-suite hwtest/selftest): inactive unless the test agent
 # starts the game with --selftest=<script>.

@@ -6,6 +6,8 @@
 # Pinned to the same Exult / SDL3 commits the shipped binary was built from.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# Port version for the START menu, taken before the build touches anything.
+PORT_VERSION="$(git -C "$HERE/.." describe --always --dirty 2>/dev/null || echo unknown)"
 W="$HERE/work"; mkdir -p "$W" "$HERE/out/data"
 EXULT_COMMIT=$(cat "$HERE/patches/EXULT_COMMIT")
 SDL3_COMMIT=$(cat "$HERE/patches/SDL3_COMMIT")
@@ -32,13 +34,13 @@ docker run --rm -v "$W/host":/src -v "$HERE/3ds":/kit -w /src devkitpro/devkitar
 (cd "$W/host" && find data -name '*_flx.h' -o -name '*_vga.h' -o -name '*.flx' -o -name '*.vga' | while read f; do cp "$f" "$W/exult/$f"; done)
 
 # 2) 3DS deps + Exult
-docker run --rm -v "$W":/w devkitpro/devkitarm bash -ec '
+docker run --rm -e PORT_VERSION="$PORT_VERSION" -v "$W":/w devkitpro/devkitarm bash -ec '
   T=/opt/devkitpro/cmake/3DS.cmake; P=/opt/devkitpro/portlibs/3ds
   cmake -S /w/sdl3 -B /w/b-sdl3 -DCMAKE_TOOLCHAIN_FILE=$T -DCMAKE_BUILD_TYPE=Release -DSDL_SHARED=OFF -DSDL_STATIC=ON -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX=/w/deps
   cmake --build /w/b-sdl3 -j$(nproc) && cmake --install /w/b-sdl3
   cmake -S /w/vorbis -B /w/b-vorbis -DCMAKE_TOOLCHAIN_FILE=$T -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=/w/deps -DOGG_INCLUDE_DIR=$P/include -DOGG_LIBRARY=$P/lib/libogg.a
   cmake --build /w/b-vorbis -j$(nproc) && cmake --install /w/b-vorbis
-  cd /w/exult && make -f Makefile.3ds DEPS=/w/deps -j$(nproc)'
+  cd /w/exult && make -f Makefile.3ds DEPS=/w/deps PORT_VERSION="$PORT_VERSION" -j$(nproc)'
 
 cp "$W/exult/exult.3dsx" "$HERE/out/"
 for f in exult.flx exult_bg.flx exult_si.flx fonts_original.vga fonts_serif.vga shortcutbar.vga midisfx.flx; do

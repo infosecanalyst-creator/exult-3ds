@@ -52,6 +52,9 @@
 #include "ucmachine.h"
 #include "vgafile.h"
 #include "manual_text.h"
+#ifndef PORT_VERSION
+#	define PORT_VERSION "unknown"
+#endif
 #include "click3ds.h"
 #include "utils.h"
 #include <dirent.h>
@@ -1587,6 +1590,12 @@ namespace {
 		target->fill8(C_BG, GAME_W, H, 0, 0);
 		target->fill8(C_PANEL, GAME_W, 22, 0, 0);
 		text(0, pm_page == 0 ? "MENU" : "EXIT GAME", 8, 7);
+		if (pm_page == 0) {    // port version (git describe of exult-3ds), right of the title
+			if (auto f = font(0)) {
+				const char* v = "Build " PORT_VERSION;
+				text(0, v, GAME_W - 8 - f->get_text_width(v), 7);
+			}
+		}
 		if (pm_page == 0) {
 			for (int i = 0; i < PM_COUNT; i++) {
 				pm_button(i, i == PM_LEFTY ? (g_lefty ? "LEFT HAND: ON" : "LEFT HAND: OFF") : pm_labels[i]);
