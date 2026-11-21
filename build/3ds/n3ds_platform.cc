@@ -169,6 +169,9 @@ static devoptab_t log_dotab {};
 // file is buffered and flushed at most once a second (or on a FATAL line):
 // flushing every line costs an SD round trip each time, and Exult logs a
 // lot during play (NPC path-finding).
+// EX-07: files the port's write streams (files/utils.cc) failed to open, write or close.
+extern "C" volatile unsigned n3ds_write_failures = 0;
+
 extern "C" unsigned long long n3ds_ticks() {
 	return svcGetSystemTick();
 }
@@ -309,6 +312,8 @@ extern "C" int n3ds_heap_used_mb() {
 
 // Make crashes visible: without these, an uncaught exception or running out
 // of memory just ends the program silently (abort -> exit) on the 3DS.
+extern "C" void n3ds_heartbeat_stop();    // below (EX-05)
+
 static void n3ds_terminate() {
 	const char* what = "unknown";
 	std::string type = "?";
@@ -328,6 +333,7 @@ static void n3ds_terminate() {
 	// thread may fault in ndspiReadChnState once the heap its stack lives in is freed (the JA2
 	// exit crash, Nov 20 2026). shutdown() does nothing if the click never started or already stopped.
 	click3ds::shutdown();
+	n3ds_heartbeat_stop();    // EX-05: not writing the log while the services close
 	_exit(1);
 }
 
@@ -601,6 +607,10 @@ static void sdm_install() {
 // Heartbeat: when the game has logged nothing for 3 seconds, note what it was
 // last doing on the SD card and how many SD calls it has made since, so a
 // stall (or a crawl) shows up in the log with its context.
+// EX-05: stopped and joined at exit (n3ds_heartbeat_stop), before the log and the strings it
+// uses are destroyed; it used to keep running through exit().
+static volatile bool hb_run = true;
+static Thread        hb_thread = nullptr;
 static void heartbeat(void*) {
 	u64      last_ops = 0;
 	unsigned beats    = 0;
@@ -608,8 +618,13 @@ static void heartbeat(void*) {
 	unsigned last_wn  = 0;
 	unsigned tick = 0;
 	u64      last_out = 0;
-	for (;;) {
-		svcSleepThread(500000000LL);
+	while (hb_run) {
+		for (int i = 0; i < 5 && hb_run; i++) {
+			svcSleepThread(100000000LL);    // 0.5 s in all, stoppable
+		}
+		if (!hb_run) {
+			break;
+		}
 		// Each write ties up the SD card for a while, and the game reads it
 		// constantly while loading or saving: write the log in batches, every
 		// 10 seconds or when 16 KB has built up, not every half second.
@@ -689,7 +704,20 @@ static void heartbeat_start() {
 	s32 prio       = 0x30;
 	svcGetThreadPriority(&prio, CUR_THREAD_HANDLE);
 	// Above the game (it sleeps almost all the time), on the game's core.
-	threadCreate(heartbeat, nullptr, 16 * 1024, prio > 0x20 ? prio - 8 : 0x19, -2, true);
+	hb_thread = threadCreate(heartbeat, nullptr, 16 * 1024, prio > 0x20 ? prio - 8 : 0x19, -2, false);
+}
+
+// EX-05: every way out: stop the heartbeat thread, then write what is left of the log once.
+extern "C" void n3ds_heartbeat_stop() {
+	if (!hb_thread) {
+		return;
+	}
+	hb_run = false;
+	if (R_SUCCEEDED(threadJoin(hb_thread, 2000000000ULL))) {
+		threadFree(hb_thread);
+	}
+	hb_thread = nullptr;
+	log_write_out();
 }
 
 extern "C" void n3ds_sd_report(char* out, unsigned n) {

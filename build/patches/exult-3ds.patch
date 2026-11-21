@@ -54,7 +54,7 @@ index 5142fb6..e224b24 100644
  			std::make_unique<Text_effect>(msg, gwin->get_scrolltx() + x / c_tilesize, gwin->get_scrollty() + y / c_tilesize, gwin));
  }
 diff --git a/exult.cc b/exult.cc
-index 4ba1584..22e1de7 100644
+index 4ba1584..26b3a59 100644
 --- a/exult.cc
 +++ b/exult.cc
 @@ -1,3 +1,4 @@
@@ -62,11 +62,13 @@ index 4ba1584..22e1de7 100644
  /**
   ** Exult.cc - Multiplatform Ultima 7 game engine
   **
-@@ -22,6 +23,12 @@
+@@ -22,6 +23,14 @@
   *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
   */
  
 +#ifdef N3DS_PORT
++bool n3ds_take_quit();     // 3ds/n3ds_bottom.cc (EX-04)
++void n3ds_safe_point();    // 3ds/n3ds_bottom.cc (EX-06)
 +extern "C" void n3ds_after_sdl_init();
 +extern "C" int  n3ds_frontend_game_choice();    // 3ds/n3ds_frontend.cc
 +class TouchUI;
@@ -75,7 +77,7 @@ index 4ba1584..22e1de7 100644
  #ifdef HAVE_CONFIG_H
  #	include <config.h>
  #endif
-@@ -250,6 +257,7 @@ int main(int argc, char* argv[]) {
+@@ -250,6 +259,7 @@ int main(int argc, char* argv[]) {
  	// cross-platform support.  Standalone utilities continue to default
  	// to the default std::fstream-based file I/O to avoid taking an SDL
  	// dependency.
@@ -83,7 +85,7 @@ index 4ba1584..22e1de7 100644
  	U7set_istream_factory([](const char* s, std::ios_base::openmode mode) -> std::unique_ptr<std::istream> {
  		auto file = std::make_unique<std::ifstream>(s, mode);
  		if (file->good()) {
-@@ -264,6 +272,7 @@ int main(int argc, char* argv[]) {
+@@ -264,6 +274,7 @@ int main(int argc, char* argv[]) {
  		}
  		return std::make_unique<SdlRwopsOstream>(s, mode);
  	});
@@ -91,7 +93,7 @@ index 4ba1584..22e1de7 100644
  #ifdef SDL_PLATFORM_IOS
  	const char* launchFlag = iOS_GetLaunchGameFlag();
  
-@@ -579,7 +588,9 @@ int exult_main(const char* runpath) {
+@@ -579,7 +590,9 @@ int exult_main(const char* runpath) {
  	std::cout << std::endl;
  
  	// Check CRCs of our .flx files
@@ -102,7 +104,7 @@ index 4ba1584..22e1de7 100644
  	const char*  flexname = BUNDLE_CHECK(BUNDLE_EXULT_FLX, EXULT_FLX);
  	const uint32 crc      = crc32(flexname);
  	if (crc != EXULT_FLX_CRC32) {
-@@ -596,6 +607,8 @@ int exult_main(const char* runpath) {
+@@ -596,6 +609,8 @@ int exult_main(const char* runpath) {
  		crc_ok = false;
  		cerr << "exult_si.flx has a wrong checksum!" << endl;
  	}
@@ -111,7 +113,7 @@ index 4ba1584..22e1de7 100644
  
  	bool config_ignore_crc;
  	config->value("config/disk/no_crc", config_ignore_crc);
-@@ -663,6 +676,8 @@ int exult_main(const char* runpath) {
+@@ -663,6 +678,8 @@ int exult_main(const char* runpath) {
  	touchui = new TouchUI_iOS();
  #elif defined(ANDROID)
  	touchui = new TouchUI_Android();
@@ -120,7 +122,7 @@ index 4ba1584..22e1de7 100644
  #endif
  	Init();    // Create main window.
  
-@@ -798,6 +813,9 @@ static void Init() {
+@@ -798,6 +815,9 @@ static void Init() {
  		exit(-1);
  	}
  	std::atexit(SDL_Quit);
@@ -130,7 +132,7 @@ index 4ba1584..22e1de7 100644
  
  	// KBD repeat should be nice.
  	SDL_HideCursor();
-@@ -976,6 +994,20 @@ static void Init() {
+@@ -976,6 +996,20 @@ static void Init() {
  
  			exit(error);
  		}
@@ -151,6 +153,61 @@ index 4ba1584..22e1de7 100644
  #endif
  		if (!newgame) {
  			ExultMenu exult_menu(gwin);
+@@ -1385,6 +1419,13 @@ static void Handle_events() {
+ 		while (!quitting_time && SDL_PollEvent(&event)) {
+ 			Handle_event(event);
+ 		}
++#ifdef N3DS_PORT
++		// EX-06: the exit save (EXIT GAME -> YES, HOME -> Close) runs here, on the main loop
++		// between frames, never inside the event pump or a nested wait.
++		if (!quitting_time) {
++			n3ds_safe_point();
++		}
++#endif
+ 
+ 		// Animate unless dormant.
+ 		if (gwin->have_focus() && !dragging) {
+@@ -2100,6 +2141,13 @@ static void Handle_event(SDL_Event& event) {
+ 		gwin->lose_focus();
+ 		break;
+ 	case SDL_EVENT_QUIT:
++#ifdef N3DS_PORT
++		// EX-04: HOME -> Close. In a game the 3DS port makes the exit save at its safe point and
++		// quits; Exult's own "really quit?" box would be drawn where nobody sees it.
++		if (n3ds_take_quit()) {
++			break;
++		}
++#endif
+ 		gwin->get_gump_man()->okay_to_quit();
+ 		break;
+ 	case SDL_EVENT_KEY_DOWN:    // Keystroke.
+@@ -2341,6 +2389,14 @@ static bool Get_click(
+ 	SDL_Renderer* renderer = SDL_GetRenderer(gwin->get_win()->get_screen_window());
+ 	while (true) {
+ 		SDL_Event event;
++#ifdef N3DS_PORT
++		// EX-04: the app is closing (HOME -> Close during a conversation or a targeting click):
++		// give up the wait like ESC, so every wait unwinds and Exult can leave.
++		if (quitting_time != QUIT_TIME_NO) {
++			g_waiting_for_click = false;
++			return false;
++		}
++#endif
+ 		Delay();    // Wait a fraction of a second.
+ 
+ 		const uint32 ticks = SDL_GetTicks();
+@@ -2467,6 +2523,11 @@ static bool Get_click(
+ 			case SDL_EVENT_WINDOW_FOCUS_LOST:
+ 				gwin->lose_focus();
+ 				break;
++#ifdef N3DS_PORT
++			case SDL_EVENT_QUIT:    // EX-04: closing; the 3DS port decides about the exit save
++				g_waiting_for_click = false;
++				return false;
++#endif
+ 			}
+ 		}
+ 		if (dragging) {
 diff --git a/exultmenu.cc b/exultmenu.cc
 index 7427b67..2188d5b 100644
 --- a/exultmenu.cc
@@ -249,7 +306,7 @@ index 7427b67..2188d5b 100644
  		auto*          entry    = new MenuGameEntry(fonton, font, exultmod.get_menu_string().c_str(), nullptr, menux, ypos);
  		entry->set_id(i);
 diff --git a/files/utils.cc b/files/utils.cc
-index 6f68316..c36221e 100644
+index 6f68316..29b76d4 100644
 --- a/files/utils.cc
 +++ b/files/utils.cc
 @@ -1,3 +1,4 @@
@@ -281,11 +338,12 @@ index 6f68316..c36221e 100644
  using std::ios;
  using std::string;
  
-@@ -85,6 +96,305 @@ static void switch_slashes(string& name);
+@@ -85,6 +96,312 @@ static void switch_slashes(string& name);
  static bool base_to_uppercase(string& str, int count);
  
  // Global factories for instantiating file streams
 +#ifdef N3DS_PORT
++extern "C" volatile unsigned n3ds_write_failures;    // 3ds/n3ds_platform.cc (EX-07)
 +// 3DS: every request that reaches the SD card is a slow IPC round trip.
 +//  - Files up to 9 MB are read whole with a few large read() calls and kept
 +//    in a RAM cache (24 MB, least-recently-used out; streams share the
@@ -382,10 +440,16 @@ index 6f68316..c36221e 100644
 +		}
 +
 +		~N3dsOfstream() override {
-+			const std::streamoff n = is_open() ? static_cast<std::streamoff>(tellp()) : 0;
++			const bool opened = is_open();
++			const std::streamoff n = opened ? static_cast<std::streamoff>(tellp()) : 0;
 +			const unsigned long long t0 = n3ds_ticks();
 +			close();    // flush while the buffer is still alive
 +			w_close_ticks += n3ds_ticks() - t0;
++			// EX-07: a file that could not be opened, written or closed (SD card full or
++			// locked) is counted, so the exit save can tell it did not complete
++			if (!opened || fail() || bad()) {
++				n3ds_write_failures++;
++			}
 +			if (n > 0) {
 +				w_bytes += static_cast<unsigned long long>(n);
 +			}
@@ -587,7 +651,7 @@ index 6f68316..c36221e 100644
  static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openmode mode) {
  	return std::make_unique<std::ifstream>(s, mode);
  };
-@@ -92,6 +402,7 @@ static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openm
+@@ -92,6 +409,7 @@ static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openm
  static U7OstreamFactory ostream_factory = [](const char* s, std::ios_base::openmode mode) {
  	return std::make_unique<std::ofstream>(s, mode);
  };
@@ -595,7 +659,7 @@ index 6f68316..c36221e 100644
  
  // Ugly hack for supporting different paths
  
-@@ -257,6 +568,12 @@ static bool base_to_uppercase(string& str, int count) {
+@@ -257,6 +575,12 @@ static bool base_to_uppercase(string& str, int count) {
  	if (count <= 0) {
  		return true;
  	}
@@ -608,7 +672,7 @@ index 6f68316..c36221e 100644
  
  	int todo = count;
  	// Go backwards.
-@@ -374,6 +691,11 @@ DIR* U7opendir(const char* fname    // May be converted to upper-case.
+@@ -374,6 +698,11 @@ DIR* U7opendir(const char* fname    // May be converted to upper-case.
  ) {
  	string name           = get_system_path(fname);
  	int    uppercasecount = 0;
@@ -1404,6 +1468,29 @@ index 92b4c23..1c9f3b2 100644
  	inline int get_num_answers() const {
  		return answers.size();
  	}
+diff --git a/usecode/ucinternal.cc b/usecode/ucinternal.cc
+index ea94f46..4c62ba8 100644
+--- a/usecode/ucinternal.cc
++++ b/usecode/ucinternal.cc
+@@ -1,3 +1,4 @@
++// Modified for exult-3ds, 2026-11 (Nintendo 3DS port changes; see build/patches/exult-3ds.patch).
+ /*
+  *  ucinternal.cc - Interpreter for usecode.
+  *
+@@ -1698,6 +1699,13 @@ int Usecode_internal::get_user_choice_num() {
+ 		const bool result = Get_click(x, y, Mouse::hand, &chr, false, conv, true);
+ 		if (!result) {    // ESC pressed, select 'bye' if poss.
+ 			choice_num = conv->locate_answer("bye");
++#ifdef N3DS_PORT
++			// EX-04: closing the app: never wait for an answer that will not come (nothing is
++			// saved after a close that came during a conversation)
++			if (choice_num < 0 && quitting_time != QUIT_TIME_NO && conv->get_num_answers() > 0) {
++				choice_num = 0;
++			}
++#endif
+ 		} else if (chr) {       // key pressed
+ 			choice_num = -1;    // invalid key
+ 			if (std::isalnum(static_cast<unsigned char>(chr))) {
 diff --git a/usecode/ucmachine.h b/usecode/ucmachine.h
 index 0c0ff81..6a1f9cb 100644
 --- a/usecode/ucmachine.h

@@ -58,6 +58,7 @@
 #include "click3ds.h"
 #include "utils.h"
 #include <dirent.h>
+#include <cstdlib>
 #include <sys/stat.h>
 
 #ifdef __GNUC__
@@ -2058,6 +2059,8 @@ static bool backup_gamedat() {
 // (*busy is then true and nothing is written). EX-01: gamedat is rewritten in place, so a
 // copy of the last good one is kept as gamedat.bak first (boot falls back to it if gamedat
 // is broken); no copy, no write: a full card would leave gamedat half-written.
+extern "C" volatile unsigned n3ds_write_failures;    // n3ds_platform.cc: files that failed to write (EX-07)
+
 static bool exit_quicksave(bool* busy_out) {
 	Game_window*  gw = Game_window::get_instance();
 	Conversation* cv = nullptr;
@@ -2076,7 +2079,13 @@ static bool exit_quicksave(bool* busy_out) {
 		return false;
 	}
 	try {
+		// EX-07: Exult's own writers ignore failed writes; the port's file streams count them
+		const unsigned failures = n3ds_write_failures;
 		gw->write();
+		if (n3ds_write_failures != failures) {
+			std::printf("[exult-3ds] quicksave on exit FAILED: %u file(s) not written\n", n3ds_write_failures - failures);
+			return false;
+		}
 		std::printf("[exult-3ds] quicksave on exit\n");
 		return true;
 	} catch (...) {
@@ -2085,25 +2094,90 @@ static bool exit_quicksave(bool* busy_out) {
 	}
 }
 
-// EX-04: HOME -> Close. SDL's 3DS event pump turns the close request into SDL_EVENT_QUIT,
-// which Exult answers with its own "Do you really want to quit?" box - drawn where nobody
-// can see it any more, so the 3DS hung on Close. This watch sees the event as it is pushed
-// (on the main thread, from the same input polling the START menu runs in): in a game it
-// makes the exit save above and sets quitting_time, so the box closes at once (its loop
-// ends when quitting_time is set) and Exult leaves the normal way. Exult's own menus
-// handle the event themselves (they return at once on it).
+// EX-04 / EX-06: HOME -> Close. SDL's 3DS event pump turns the close request into
+// SDL_EVENT_QUIT. Nothing is saved inside the pump (it can run inside any wait of Exult's, and
+// this watch runs inside SDL_PushEvent): the watch only decides. In a game at a quiet moment it
+// asks for the exit save, which n3ds_safe_point() makes on the main loop between frames, then
+// quits. During a talk, a fight or with a window open (no save possible) it quits at once: every
+// wait gives up when quitting_time is set (Get_click, patched), so a close during a conversation
+// no longer hangs. Exult's own "really quit?" box is skipped in a game (n3ds_take_quit).
+static int      close_state = 0;    // 0 none, 1 exit save asked for (HOME -> Close), 2 handled
+static uint64_t close_t0    = 0;
+static bool     exit_save_pending = false;    // EXIT GAME -> YES: save at the safe point
+
+static bool exit_save_busy() {
+	Game_window*  gw = Game_window::get_instance();
+	Conversation* cv = nullptr;
+	if (gw) {
+		if (Usecode_machine* uc = gw->get_usecode()) {
+			cv = uc->get_conversation();
+		}
+	}
+	Gump_manager* gm = gw ? gw->get_gump_man() : nullptr;
+	return !gw || !gw->get_main_actor() || (gm && gm->showing_gumps()) || gw->in_combat()
+		   || (cv && (cv->get_num_faces_on_screen() > 0 || cv->are_choices_active()));
+}
+
 static bool quit_watch(void*, SDL_Event* e) {
-	static bool handled = false;
-	if (e->type != SDL_EVENT_QUIT || handled || quitting_time != QUIT_TIME_NO) return true;
+	if (e->type != SDL_EVENT_QUIT || close_state != 0 || quitting_time != QUIT_TIME_NO) return true;
 	Game_window* gw = Game_window::get_instance();
-	if (!gw || !gw->get_main_actor()) return true;
-	handled          = true;
-	bool       busy  = false;
-	const bool saved = exit_quicksave(&busy);
-	std::printf("[exult-3ds] close requested (HOME -> Close): %s\n",
-				saved ? "saved" : busy ? "not saved (talk, fight or window open)" : "not saved (write failed)");
-	quitting_time = QUIT_TIME_YES;
+	if (!gw || !gw->get_main_actor()) return true;    // Exult's own menus handle it themselves
+	if (exit_save_busy()) {
+		close_state   = 2;
+		quitting_time = QUIT_TIME_YES;
+		std::printf("[exult-3ds] close requested (HOME -> Close): not saved (talk, fight or window open)\n");
+	} else {
+		close_state = 1;
+		close_t0    = SDL_GetTicks();
+	}
 	return true;
+}
+
+// exult.cc's SDL_EVENT_QUIT: true when the port deals with the close (in a game).
+bool n3ds_take_quit() {
+	return close_state != 0;
+}
+
+// exult.cc's main loop, between frames (EX-06): the only place the exit save is made.
+void n3ds_safe_point() {
+	if (close_state == 1) {
+		close_state      = 2;
+		bool       busy  = false;
+		const bool saved = exit_quicksave(&busy);
+		std::printf("[exult-3ds] close requested (HOME -> Close): %s\n",
+					saved ? "saved" : busy ? "not saved (talk, fight or window open)" : "not saved (write failed)");
+		quitting_time = QUIT_TIME_YES;
+		return;
+	}
+	if (exit_save_pending) {
+		exit_save_pending = false;
+		bool       busy   = false;
+		const bool saved  = exit_quicksave(&busy);
+		if (saved) {
+			quitting_time = QUIT_TIME_YES;
+			return;
+		}
+		// EX-03: never quit silently without the save: the menu comes back on its page 2
+		pm_open       = true;
+		set_menu(true);
+		pm_open       = true;
+		pm_page       = 2;
+		pm_focus      = 1;    // focus on NO
+		pm_cant_save  = busy;
+		menu_dirty    = true;
+		overlay_dirty = true;
+		last_draw     = 0;
+	}
+}
+
+// Called from the input tick: a close whose safe point never comes (Exult busy in a long wait
+// that is not a talk or a window) quits without the save after 2 s instead of hanging.
+static void close_watchdog() {
+	if (close_state == 1 && SDL_GetTicks() - close_t0 > 2000) {
+		close_state   = 2;
+		quitting_time = QUIT_TIME_YES;
+		std::printf("[exult-3ds] close requested (HOME -> Close): not saved (the game did not reach a safe point)\n");
+	}
 }
 
 // START port menu: act on item i of the current page
@@ -2148,21 +2222,11 @@ static void pm_act(int i) {
 		// Rule 17 (never lose progress): quicksave into the game in progress first
 		// (exit_quicksave: what SELECT and the 15-minute autosave do), unless a
 		// conversation, an open gump or a fight makes saving unsafe right now.
-		{
-			bool       busy  = false;
-			const bool saved = exit_quicksave(&busy);
-			if (!saved) {                          // EX-03: never quit silently without the save
-				pm_cant_save = busy;
-				pm_page      = 2;
-				pm_focus     = 1;                  // focus on NO
-				menu_dirty    = true;
-				overlay_dirty = true;
-				last_draw     = 0;
-				return;
-			}
-		}
+		// EX-06: not here (this runs inside SDL's input polling): the menu closes and
+		// n3ds_safe_point() saves on the main loop, then quits, or reopens this menu on
+		// page 2 when the save could not be made (EX-03: never quit silently).
 		set_menu(false);
-		quitting_time = QUIT_TIME_YES;             // already asked here: no second prompt
+		exit_save_pending = true;
 	} else {
 		pm_page  = 0;
 		pm_focus = PM_EXIT;
@@ -2311,8 +2375,13 @@ extern "C" u32 N3DS_KeyHook(u32 kDown, u32 kHeld) {
 	return taken;
 }
 
+extern "C" void n3ds_heartbeat_stop();    // n3ds_platform.cc (EX-05)
+
 void n3ds_bottom_init() {
 	SDL_AddEventWatch(quit_watch, nullptr);    // EX-04
+	// EX-05: registered now, after every static object exists, so it runs first at exit: the
+	// heartbeat thread is stopped before the strings and the log it uses are destroyed
+	std::atexit(n3ds_heartbeat_stop);
 }
 
 void n3ds_bottom_tick();
@@ -2323,6 +2392,7 @@ extern "C" void N3DS_InputTick() {
 	static bool busy = false;
 	if (!busy) {
 		busy = true;
+		close_watchdog();    // EX-04
 		n3ds_bottom_tick();
 		busy = false;
 	}
