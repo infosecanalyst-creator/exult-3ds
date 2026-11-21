@@ -180,6 +180,23 @@ static bool log_at_bol     = true;
 
 static LightLock log_lock;
 static bool      log_lock_ready = false;
+// EX-08/EX-09: the full log, the launch benchmark and the heartbeat's quiet-spell probe only
+// with sdmc:/3ds/exult/debug.txt (checked once, at start-up). Without it exult.log keeps the
+// port's own "[exult-3ds]" lines (start, saves, close, swaps) and errors/fatal lines; Exult's
+// own chatter is dropped before it reaches the log buffer.
+static bool log_debug  = false;
+static bool log_keep   = true;     // keep the line being written (decided at its first byte)
+extern "C" int n3ds_debug_log() { return log_debug ? 1 : 0; }
+
+static bool log_line_wanted(const char* p, size_t n) {
+	static const char* const keys[] = {"[exult-3ds]", "FATAL", "rror", "RROR", "xception", "ssert"};
+	for (const char* k : keys) {
+		if (memmem(p, n, k, strlen(k)) != nullptr) {
+			return true;
+		}
+	}
+	return false;
+}
 static volatile u64 log_last_line = 0;    // when the game last logged anything
 
 // The log is built in memory and written by a background thread, so the
@@ -209,6 +226,10 @@ static void log_write_out() {
 		return;
 	}
 	LightLock_Lock(&log_file_lock);
+	if (log_pos > 1024 * 1024) {    // debug.txt: roll over at 1 MB, back to the start of the file
+		log_pos = 0;
+		out.insert(0, "<<< log rolled over at 1 MB >>>\n");
+	}
 	fseek(log_file, log_pos, SEEK_SET);
 	log_pos += static_cast<long>(out.size());
 	out += LOG_END;    // one write per batch: every SD write costs ~100 ms on the 3DS
@@ -226,6 +247,15 @@ static ssize_t log_write(struct _reent*, void*, const char* ptr, size_t len) {
 	log_last_line = now;
 	char      stamp[48];
 	for (size_t i = 0; i < len;) {
+		if (log_at_bol) {
+			log_keep = log_debug || log_line_wanted(ptr + i, len - i);
+		}
+		if (!log_keep) {    // not wanted: skip to the end of this line
+			const char* nl = static_cast<const char*>(memchr(ptr + i, '\n', len - i));
+			log_at_bol     = nl != nullptr;
+			i              = nl ? static_cast<size_t>(nl - ptr) + 1 : len;
+			continue;
+		}
 		if (log_at_bol) {
 			// Integer formatting only: this runs inside printf's own output
 			// path, and nesting floating-point formatting there garbles it.
@@ -488,7 +518,7 @@ static void sdm_mark(const char* what, const char* path) {
 
 static void sdm_note(const char* what, const char* path, u64 dt) {
 	const double ms = dt / 268111.856;
-	if (ms >= 150 && !sdm_in && sdm_slow < 200) {
+	if (log_debug && ms >= 150 && !sdm_in && sdm_slow < 200) {
 		sdm_in = true;
 		sdm_slow++;
 		printf("[exult-3ds] slow SD %s %.0f ms: %s\n", what, ms, path ? path : "?");
@@ -593,7 +623,7 @@ static void heartbeat(void*) {
 				last_out = t;
 			}
 		}
-		if (++tick % 4 != 0 || !log_file) {
+		if (++tick % 4 != 0 || !log_file || !log_debug) {    // quiet-spell probe: debug.txt only (EX-09)
 			continue;
 		}
 		const u64 now   = osGetTime();
@@ -785,6 +815,7 @@ __attribute__((constructor(101))) static void n3ds_early_init() {
 			}
 		}
 	}
+	log_debug = file_exists(N3DS_HOME "/debug.txt");    // once, at start-up
 	log_file = fopen(N3DS_HOME "/exult.log", "r+b");
 	log_t0   = osGetTime();
 	LightLock_Init(&log_lock);
@@ -801,9 +832,14 @@ __attribute__((constructor(101))) static void n3ds_early_init() {
 	setvbuf(stdout, nullptr, _IOLBF, 0);
 	setvbuf(stderr, nullptr, _IONBF, 0);
 	log_memory();
+	if (log_debug) {
+		printf("[exult-3ds] debug log on (debug.txt)\n");
+	}
 	sdm_install();
-	heartbeat_start();
-	n3ds_bench();
+	heartbeat_start();    // also writes the log out in batches
+	if (log_debug) {
+		n3ds_bench();    // EX-08: ~0.5 s of CPU, memory and SD tests: debug.txt only
+	}
 }
 
 // Quick hardware check written to the log at every launch: CPU clock (is the

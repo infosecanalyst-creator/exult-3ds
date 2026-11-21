@@ -137,7 +137,7 @@ Homebrew needs a dump of the 3DS sound firmware. Run DSP1 from the Homebrew Laun
 Starting a game and saving write many small files to the SD card, which takes a while on the 3DS. Let it finish.
 
 ## Something went wrong
-Exult keeps a log in sdmc:/3ds/exult/exult.log. Every line is timestamped. Send it along with a note of what you were doing.
+Exult keeps a log in sdmc:/3ds/exult/exult.log. Every line is timestamped. Send it along with a note of what you were doing. For a detailed log, create an empty file named debug.txt in sdmc:/3ds/exult/ and start the game again; delete it afterwards, as the detailed log slows the game.
 
 ## Changing this manual
 A file named manual.txt in sdmc:/3ds/exult/ replaces the built-in text. Sections start with "# ", headings with "## ", list items with "- ", numbered steps with "1. ", and table rows with "| ".

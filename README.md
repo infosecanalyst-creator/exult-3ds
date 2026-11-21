@@ -146,7 +146,7 @@ Option **6** in `Exult-3DS.cmd` syncs saves both ways with Exult on the PC:
 - **Intro:** the splash intro is skipped. View Introduction is still in the game menu.
 - **Fonts:** `modern`. This is U7 Pixel Sans, a font drawn pixel by pixel for this screen: capitals are 9 px tall and lowercase 6 px, in light grey with a black outline. It applies to conversations, names, labels and the bottom screen. Runic and Ophidian writing on signs stays in its original script. You can switch to Exult's Original or Serif fonts in the game's Display options.
 - **Text background:** a dark, translucent box behind conversation text (Exult's `textbackground` setting, set to 15, dark grey). Turn it off in Display options.
-- **Log:** `sdmc:/3ds/exult/exult.log`, with every line timestamped. It is kept in memory and written in batches by a background thread, since a single SD write can take seconds on a large card.
+- **Log:** `sdmc:/3ds/exult/exult.log`, with every line timestamped. It is kept in memory and written in batches by a background thread, since a single SD write can take seconds on a large card. Only the port's own lines and errors go in by default; an empty `sdmc:/3ds/exult/debug.txt` turns on the full log, the launch benchmark and the stall heartbeat (rolled over at 1 MB).
 - **Sound effects:** the Sound Quest packs (`sqsfxbg.flx`, `sqsfxsi.flx`) in `data/` when present.
 - **SD lookups:** the game's static, patch, mods and data folders are listed once, so files that aren't there (sound-effect overrides, patch files) cost no SD access.
 
