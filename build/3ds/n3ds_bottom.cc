@@ -774,7 +774,7 @@ namespace {
 		y += 3;
 		target->fill8(C_EDGE, sw, 1, sx, y);
 		y += 3;
-		const int line_h = 13, bottom = H - 1;
+		const int line_h = 13, bottom = H - 3;    // 2 px clear of the edge: descenders (g, y) of the last line were cut
 		const int room   = (bottom - y) / line_h;
 		if (room <= 0) {
 			return;
