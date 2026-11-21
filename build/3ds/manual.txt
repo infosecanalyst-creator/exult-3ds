@@ -41,6 +41,7 @@ The top screen never needs touching.
 | Tags | PSN poisoned, FOOD hungry, STRV starving, ZZ asleep, PAR paralyzed, CHM charmed.
 | Minimap | The land around you. You are white, the party green, people yellow, foes a red X. The box is what the touchscreen shows.
 | Info | The day and time, COMBAT while fighting, what the stylus or cursor is on, problems like "Iolo is hungry", and recent messages.
+| Alerts | When a party member becomes badly hurt, poisoned or paralyzed, the game says so in its own centred text over the game. Two at once are both shown. There is no alert for how a game loads, for someone who just joined, or for the dead.
 
 The top screen also takes over to show the world map, the party's stats, conversations, books, scrolls and signs.
 
@@ -118,6 +119,13 @@ ZL (or Swap screens in the commands menu) puts the game back on the top screen a
 - The game autosaves every 15 minutes when you are not talking, fighting or in a window.
 - Journey Onward continues the game in progress.
 
+## Leaving the game
+EXIT GAME in the START menu asks "Exit Ultima VII?". YES quicksaves first, then leaves. Closing Exult from the HOME menu (HOME, then Close) does the same.
+- Before it saves, the game keeps a copy of your last good game files as gamedat.bak. If the game files are ever damaged, the game starts from that copy.
+- It cannot save during a conversation, a fight or with a window open. EXIT GAME then says "Not saved!" and asks EXIT ANYWAY or NO. NO takes you back to the game: finish what you were doing and exit again. Closing from HOME in such a moment leaves at once without saving.
+- If the save fails (SD card full?) you are asked the same way. The game never leaves after a failed save without asking.
+- The settings file (exult.cfg) is written to a temporary file and then renamed, and the old one is kept as exult.cfg.bak, so a failed write cannot lose your settings.
+
 Saves live in sdmc:/3ds/exult/saves and use the same format as Exult on Windows, macOS and Linux. Exult-3DS.cmd option 6 syncs them both ways with your PC.
 
 # Text and fonts
@@ -137,7 +145,14 @@ Homebrew needs a dump of the 3DS sound firmware. Run DSP1 from the Homebrew Laun
 Starting a game and saving write many small files to the SD card, which takes a while on the 3DS. Let it finish.
 
 ## Something went wrong
-Exult keeps a log in sdmc:/3ds/exult/exult.log. Every line is timestamped. Send it along with a note of what you were doing. For a detailed log, create an empty file named debug.txt in sdmc:/3ds/exult/ and start the game again; delete it afterwards, as the detailed log slows the game.
+Exult keeps a log in sdmc:/3ds/exult/exult.log. Every line is timestamped. It holds the start, the exit and any errors or failed writes. Send it along with a note of what you were doing. For a detailed log (launch timing, the stall watch and Exult's own messages), create an empty file named debug.txt in sdmc:/3ds/exult/ and start the game again; delete it afterwards, as the detailed log slows the game.
+
+## Where everything is
+- The program: sdmc:/3ds/exult.3dsx (directly in /3ds).
+- Everything else: sdmc:/3ds/exult/ (data, game files, saves, exult.cfg, exult.log).
+
+## Original 3DS or 2DS
+Exult needs a New 3DS. On an original 3DS or 2DS it says so and returns to the Homebrew Menu.
 
 ## Changing this manual
 A file named manual.txt in sdmc:/3ds/exult/ replaces the built-in text. Sections start with "# ", headings with "## ", list items with "- ", numbered steps with "1. ", and table rows with "| ".

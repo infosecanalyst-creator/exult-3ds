@@ -16,6 +16,7 @@ The original game was played with a mouse. This port is built for the stylus:
 - **Stereoscopic 3D:** swap the game onto the top screen and the 3D slider gives the world real depth. Roofs, trees and walls rise out of the screen.
 - **A start screen:** pick Black Gate or Serpent Isle, then Continue, New Game (name your Avatar) or Load Game, and go straight into play.
 - **A full instruction manual in the game** (L+Y). Circle Pad or C-Stick scroll it, the D-Pad moves between sections, L/R page through them, B closes it.
+- **Safe exit:** EXIT GAME and HOME > Close quicksave first (keeping a gamedat.bak copy); if a save is not possible you are asked EXIT ANYWAY / NO. `exult.cfg` is written to a temporary file and renamed, with the old one kept as `exult.cfg.bak`.
 - **Install and update over Wi-Fi** from a Windows PC. There's no need to take the SD card out, and saves can sync both ways with Exult on the PC.
 
 > Game data isn't included. You need your own copy of Ultima VII.
