@@ -40,6 +40,7 @@
 #include "gameclk.h"
 #include "gamemap.h"
 #include "gamewin.h"
+#include "tqueue.h"
 #include "ibuf8.h"
 #include "mouse.h"
 #include "n3ds_stereo.h"
@@ -1928,7 +1929,10 @@ extern "C" void N3DS_BottomOverlay(void* fbp, int fbw, int fbh) {
 		return;
 	}
 	auto* fb = static_cast<uint32_t*>(fbp);
-	if (cb_mode != 0 && cbuf && pal_loaded) {
+	// The START menu and the manual's section buttons cover the answer panel too:
+	// START works during conversations, and the panel comes back when they close.
+	const bool ui_over_talk = menu_open && (pm_open || help_page >= 0) && mbuf;
+	if (cb_mode != 0 && cbuf && pal_loaded && !ui_over_talk) {
 		const unsigned char* s  = cbuf->get_bits();
 		const int            lw = cbuf->get_line_width();
 		for (int x = 0; x < GAME_W; x++) {
@@ -2523,6 +2527,23 @@ void n3ds_bottom_tick() {
 		do_cycle(gwin, dir);
 	}
 
+	// The world waits while the START menu or the manual is open (the game clock, NPCs and
+	// their barks ran on underneath). Same pause Exult uses for an open inventory.
+	{
+		static bool held = false;
+		const bool  want = pm_open || help_page >= 0;
+		if (want != held) {
+			held = want;
+			if (Time_queue* tq = gwin->get_tqueue()) {
+				if (want) {
+					tq->pause(Game::get_ticks());
+				} else {
+					tq->resume(Game::get_ticks());
+				}
+			}
+		}
+	}
+
 	Conversation* conv = nullptr;
 	if (Usecode_machine* uc = gwin->get_usecode()) {
 		conv = uc->get_conversation();
@@ -2560,8 +2581,8 @@ void n3ds_bottom_tick() {
 				cb_y0 = H;
 			}
 			overlay_dirty = true;
-			if (mode != 0 && menu_open) {
-				set_menu(false);
+			if (mode != 0 && menu_open && !pm_open && help_page < 0) {
+				set_menu(false);    // the game's own menu-button list; the START menu and the manual stay
 			}
 		}
 	}
@@ -2670,7 +2691,7 @@ extern "C" int N3DS_BottomTouch(int phase, int x, int y, float* nx, float* ny) {
 	// Answer buttons (conversations).
 	static bool answer_touch = false;
 	if (phase == 0) {
-		answer_touch = cb_mode == 1 && !game_on_top && y >= cb_y0;
+		answer_touch = cb_mode == 1 && !game_on_top && y >= cb_y0 && !(menu_open && (pm_open || help_page >= 0));
 	}
 	if (answer_touch) {
 		auto find = [&]() {
