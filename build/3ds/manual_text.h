@@ -136,9 +136,9 @@ Saves live in sdmc:/3ds/exult/saves and use the same format as Exult on Windows,
 The game uses a pixel font drawn for the 3DS screen, light grey with a black outline, and a dark box behind conversation text. Both can be changed in the game menu: Options, then Display (Fonts and Text background).
 
 # Your game files and mods
-Exult needs your own copy of Ultima VII. The installer copies these to the SD card:
-| sdmc:/3ds/exult/blackgate/static | The Black Gate (plus Forge of Virtue)
-| sdmc:/3ds/exult/serpentisle/static | Serpent Isle (plus The Silver Seed)
+Exult needs your own copy of Ultima VII. The installer copies these into sdmc:/3ds/exult/ on the SD card:
+| blackgate/ | The Black Gate (plus Forge of Virtue), in its static folder
+| serpentisle/ | Serpent Isle (plus The Silver Seed), in its static folder
 | .../mods | Mods such as Keyring or SI Fixes
 
 # Troubleshooting
