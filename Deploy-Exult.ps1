@@ -28,7 +28,7 @@ $sdKit    = Join-Path $kit "SD\3ds\exult"
 $settingsPath = Join-Path $kit "settings.json"
 if (-not $App) {
   $built = Join-Path $kit "build\out\exult.3dsx"        # prefer a fresh local rebuild
-  $App = if (Test-Path $built) { $built } else { Join-Path $sdKit "exult.3dsx" }
+  $App = if (Test-Path $built) { $built } else { Join-Path $kit "SD\3ds\exult.3dsx" }
 }
 
 # ---------------------------------------------------------------- settings
@@ -129,7 +129,8 @@ function Do-Install {
   $addr = Get-3DSAddress
   $base = "ftp://${addr}:$FtpPort/3ds/exult"
   Write-Host "Sending to $base" -ForegroundColor Cyan
-  Send-Files @(@{ Local = $App; Remote = "exult.3dsx" }) "Exult app" $base
+  # The app lives directly in /3ds (sdmc:/3ds/exult.3dsx); data, games and saves stay in /3ds/exult.
+  Send-Files @(@{ Local = $App; Remote = "../exult.3dsx" }) "Exult app" $base
   Send-Files (Get-TreeItems (Join-Path $sdKit "data") "data") "Exult data" $base
 
   $found = @{}

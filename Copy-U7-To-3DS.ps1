@@ -38,8 +38,10 @@ Write-Host "SD card: $sd  ->  $dest" -ForegroundColor Cyan
 
 # --- Engine + Exult data --------------------------------------------------
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
+# The app lives directly in /3ds (sdmc:/3ds/exult.3dsx); Exult's data stays in /3ds/exult.
+Copy-Item -Force (Join-Path $kit "SD\3ds\exult.3dsx") (Join-Path $sd "3ds\exult.3dsx")
 Copy-Item -Recurse -Force (Join-Path $kit "SD\3ds\exult\*") $dest
-Write-Host "Copied exult.3dsx and Exult data files."
+Write-Host "Copied exult.3dsx (to 3ds\) and Exult data files (to 3ds\exult\)."
 
 # --- Find the game data ---------------------------------------------------
 $found = @{}

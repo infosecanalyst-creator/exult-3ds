@@ -58,7 +58,7 @@ The original game was played with a mouse. This port is built for the stylus:
 Copy the files so the card looks like this:
 
 ```
-sdmc:/3ds/exult/exult.3dsx
+sdmc:/3ds/exult.3dsx                   the game (directly in /3ds, not in the exult folder)
 sdmc:/3ds/exult/data/                  Exult's data files (from the release)
 sdmc:/3ds/exult/blackgate/static/      your Black Gate STATIC folder (+ mods/)
 sdmc:/3ds/exult/serpentisle/static/    your Serpent Isle STATIC folder (+ mods/)
