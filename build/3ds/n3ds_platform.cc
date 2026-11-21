@@ -350,6 +350,31 @@ static bool file_exists(const char* p) {
 	return stat(p, &st) == 0;
 }
 
+// EX-10: the port's own writes of exult.cfg: temp file, checked write and close, then swap
+// it in (the old file is kept as .bak). Never leaves a half-written config behind.
+static bool write_file_atomic(const char* path, const char* data, size_t len) {
+	const std::string tmp = std::string(path) + ".tmp", bak = std::string(path) + ".bak";
+	FILE*             f   = fopen(tmp.c_str(), "wb");
+	if (!f) {
+		return false;
+	}
+	const bool ok = fwrite(data, 1, len, f) == len;
+	const bool cl = fclose(f) == 0;
+	if (!ok || !cl) {
+		remove(tmp.c_str());
+		return false;
+	}
+	remove(bak.c_str());
+	const bool hadOld = rename(path, bak.c_str()) == 0;
+	if (rename(tmp.c_str(), path) != 0) {
+		if (hadOld) {
+			rename(bak.c_str(), path);
+		}
+		return false;
+	}
+	return true;
+}
+
 // One-time update of a config written by an earlier build: turn on
 // hold-to-walk (touch_pathfind) and fix the game speed (fps is Exult's
 // animation speed; the first build wrote 30, the options screen could then
@@ -490,9 +515,8 @@ static void migrate_cfg() {
 		}
 	}
 	if (changed) {
-		if (FILE* o = fopen(N3DS_HOME "/exult.cfg", "wb")) {
-			fwrite(cfg.data(), 1, cfg.size(), o);
-			fclose(o);
+		if (!write_file_atomic(N3DS_HOME "/exult.cfg", cfg.data(), cfg.size())) {
+			return;    // not written: leave the markers off so the update is tried again next launch
 		}
 	}
 	for (const char* marker : {N3DS_HOME "/.cfg-v2", N3DS_HOME "/.cfg-v3", N3DS_HOME "/.cfg-v4", N3DS_HOME "/.cfg-v5", N3DS_HOME "/.cfg-v6"}) {
@@ -802,11 +826,12 @@ __attribute__((constructor(101))) static void n3ds_early_init() {
 			rename((dir + ".bak").c_str(), dir.c_str());
 	}
 
+	// EX-10: stopped between the two renames of a config write: the old one is still there as .bak
+	if (!file_exists(N3DS_HOME "/exult.cfg") && file_exists(N3DS_HOME "/exult.cfg.bak")) {
+		rename(N3DS_HOME "/exult.cfg.bak", N3DS_HOME "/exult.cfg");
+	}
 	if (!file_exists(N3DS_HOME "/exult.cfg")) {
-		if (FILE* f = fopen(N3DS_HOME "/exult.cfg", "w")) {
-			fputs(default_cfg, f);
-			fclose(f);
-		}
+		write_file_atomic(N3DS_HOME "/exult.cfg", default_cfg, strlen(default_cfg));
 	} else {
 		migrate_cfg();    // one-time updates, each guarded by its own marker file
 	}

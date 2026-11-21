@@ -135,6 +135,7 @@ extern "C" void N3DS_Represent(void);
 extern "C" void n3ds_log_flush();
 extern "C" void n3ds_show_legend();
 extern "C" unsigned long n3ds_cache_report(unsigned long* cached_kb);
+extern "C" { volatile unsigned n3ds_load_gen = 0; }    // bumped by Game_window::read_gwin on every game load (EX-11)
 extern "C" int n3ds_heap_used_mb();
 extern "C" void n3ds_io_report(char* out, unsigned n);
 extern "C" bool n3ds_write_report(char* out, unsigned n);
@@ -2451,29 +2452,46 @@ void n3ds_bottom_tick() {
 	// game is (it moves with ZL). Words, so colour is never the only signal (rule 20).
 	{
 		static uint64_t last_check = 0, last_alert = 0;
-		static std::unordered_map<const Actor*, int> prev;    // 1 badly hurt, 2 poisoned, 4 paralyzed
+		// Keyed by NPC number, not by Actor pointer: a loaded game frees and rebuilds every actor,
+		// and a new one can land on an old one's address (EX-11).
+		static std::unordered_map<int, int> prev;    // 1 badly hurt, 2 poisoned, 4 paralyzed
+		static unsigned seen_gen = 0;
+		if (seen_gen != n3ds_load_gen) {    // a game was loaded: the new state is the baseline, nothing is announced
+			seen_gen = n3ds_load_gen;
+			prev.clear();
+			last_check = now;
+		}
 		if (now - last_check > 250) {
 			last_check = now;
 			std::string msg;
-			std::unordered_map<const Actor*, int> cur;
+			std::unordered_map<int, int> cur;
 			for (Actor* a : party_members(gwin)) {
 				const int hp = a->get_effective_prop(Actor::health), maxhp = a->get_effective_prop(Actor::strength);
 				int st = 0;
-				if (maxhp > 0 && hp * 4 <= maxhp) {
-					st |= 1;
+				if (a->is_dead()) {
+					st = 0;    // the dead are not "badly hurt"
+				} else {
+					if (maxhp > 0 && hp * 4 <= maxhp) {
+						st |= 1;
+					}
+					if (a->get_flag(Obj_flags::poisoned)) {
+						st |= 2;
+					}
+					if (a->get_flag(Obj_flags::paralyzed)) {
+						st |= 4;
+					}
 				}
-				if (a->get_flag(Obj_flags::poisoned)) {
-					st |= 2;
-				}
-				if (a->get_flag(Obj_flags::paralyzed)) {
-					st |= 4;
-				}
-				cur[a]          = st;
-				const auto it   = prev.find(a);
-				const int  was  = it == prev.end() ? st : it->second;    // no alert for how a game loads
-				const int  news = st & ~was;
+				const int  key  = a->get_npc_num();
+				const auto it   = prev.find(key);
+				const int  was  = it == prev.end() ? st : it->second;    // no alert for how a game loads or who just joined
+				int        news = st & ~was;
 				if (news && msg.empty()) {
-					msg = a->get_name() + ((news & 1) ? " is badly hurt!" : (news & 2) ? " is poisoned!" : " is paralyzed!");
+					const int bit = (news & 1) ? 1 : (news & 2) ? 2 : 4;    // one thing at a time; the rest stays news
+					msg  = a->get_name() + (bit == 1 ? " is badly hurt!" : bit == 2 ? " is poisoned!" : " is paralyzed!");
+					news = news & ~bit;
+					cur[key] = st & ~news;
+				} else {
+					cur[key] = st & ~news;    // not announced yet: still news at the next check (two at once are not lost)
 				}
 			}
 			if (msg.empty() || now - last_alert > 1500) {    // a held-back alert is tried again next time

@@ -16,6 +16,47 @@ index aadd4f4..ff2ebc3 100644
  
  		if (time_till_next <= LLMD_MINIMUM_YIELD_THRESHOLD) {
  			bool wait = false;
+diff --git a/conf/Configuration.cc b/conf/Configuration.cc
+index 9159c91..cd4efed 100644
+--- a/conf/Configuration.cc
++++ b/conf/Configuration.cc
+@@ -264,6 +264,36 @@ void Configuration::write_back() {
+ 		return;    // Don't write back if not from a file
+ 	}
+ 
++#ifdef N3DS_PORT
++	// EX-10: write exult.cfg to a temp file, check the write, then swap it in (the old file
++	// stays as .bak), so a power loss in the middle never leaves a half-written config.
++	{
++		const string tmp = filename + ".tmp";
++		const string text = dump() + "\n";
++		FILE*        f   = std::fopen(tmp.c_str(), "wb");
++		if (!f) {
++			perror("Failed to write configuration file");
++			return;
++		}
++		const bool ok = std::fwrite(text.data(), 1, text.size(), f) == text.size();
++		const bool cl = std::fclose(f) == 0;
++		if (!ok || !cl) {
++			perror("Failed to write configuration file");
++			std::remove(tmp.c_str());
++			return;
++		}
++		const string bak = filename + ".bak";
++		std::remove(bak.c_str());
++		const bool hadOld = std::rename(filename.c_str(), bak.c_str()) == 0;
++		if (std::rename(tmp.c_str(), filename.c_str()) != 0) {
++			perror("Failed to write configuration file");
++			if (hadOld) {
++				std::rename(bak.c_str(), filename.c_str());    // put the old one back
++			}
++		}
++		return;
++	}
++#endif
+ 	std::unique_ptr<std::ostream> pOfile;
+ 	try {
+ 		pOfile = U7open_out(filename.c_str(), true);
 diff --git a/effects.cc b/effects.cc
 index 5142fb6..e224b24 100644
 --- a/effects.cc
@@ -306,7 +347,7 @@ index 7427b67..2188d5b 100644
  		auto*          entry    = new MenuGameEntry(fonton, font, exultmod.get_menu_string().c_str(), nullptr, menux, ypos);
  		entry->set_id(i);
 diff --git a/files/utils.cc b/files/utils.cc
-index 6f68316..29b76d4 100644
+index 6f68316..6321850 100644
 --- a/files/utils.cc
 +++ b/files/utils.cc
 @@ -1,3 +1,4 @@
@@ -338,7 +379,7 @@ index 6f68316..29b76d4 100644
  using std::ios;
  using std::string;
  
-@@ -85,6 +96,312 @@ static void switch_slashes(string& name);
+@@ -85,6 +96,320 @@ static void switch_slashes(string& name);
  static bool base_to_uppercase(string& str, int count);
  
  // Global factories for instantiating file streams
@@ -573,6 +614,14 @@ index 6f68316..29b76d4 100644
 +			fail->setstate(std::ios::failbit);
 +			return fail;
 +		}
++		// EX-12: never keep the saved game (gamedat/, saves/) in the RAM cache. The cache trusts
++		// size + modification time, which the card only keeps to 2 s; a gamedat file rewritten
++		// by anything but this stream factory (a restore, the exit-save copy, a folder swap)
++		// could then be read back stale. They are read once per load anyway.
++		if (std::strstr(s, "/gamedat") != nullptr || std::strstr(s, "/saves/") != nullptr) {
++			io_streams++;
++			return std::make_unique<N3dsIfstream>(s, mode);
++		}
 +		if (st.st_size > N3DS_CACHE_FILE) {
 +			io_streams++;
 +			return std::make_unique<N3dsIfstream>(s, mode);    // big file: read only what's needed
@@ -651,7 +700,7 @@ index 6f68316..29b76d4 100644
  static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openmode mode) {
  	return std::make_unique<std::ifstream>(s, mode);
  };
-@@ -92,6 +409,7 @@ static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openm
+@@ -92,6 +417,7 @@ static U7IstreamFactory istream_factory = [](const char* s, std::ios_base::openm
  static U7OstreamFactory ostream_factory = [](const char* s, std::ios_base::openmode mode) {
  	return std::make_unique<std::ofstream>(s, mode);
  };
@@ -659,7 +708,7 @@ index 6f68316..29b76d4 100644
  
  // Ugly hack for supporting different paths
  
-@@ -257,6 +575,12 @@ static bool base_to_uppercase(string& str, int count) {
+@@ -257,6 +583,12 @@ static bool base_to_uppercase(string& str, int count) {
  	if (count <= 0) {
  		return true;
  	}
@@ -672,7 +721,7 @@ index 6f68316..29b76d4 100644
  
  	int todo = count;
  	// Go backwards.
-@@ -374,6 +698,11 @@ DIR* U7opendir(const char* fname    // May be converted to upper-case.
+@@ -374,6 +706,11 @@ DIR* U7opendir(const char* fname    // May be converted to upper-case.
  ) {
  	string name           = get_system_path(fname);
  	int    uppercasecount = 0;
@@ -896,7 +945,7 @@ index 342436d..d21490e 100644
  	if (bbox_palindex != -1) {
  		obj->get_info().paint_bbox(
 diff --git a/gamewin.cc b/gamewin.cc
-index e40fbdd..8f2a68a 100644
+index e40fbdd..d1385d6 100644
 --- a/gamewin.cc
 +++ b/gamewin.cc
 @@ -1,3 +1,4 @@
@@ -926,6 +975,20 @@ index e40fbdd..8f2a68a 100644
  		fps = 5;
  	}
  	std_delay = 1000 / fps;    // Convert to msecs. between frames.
+@@ -1509,7 +1514,13 @@ void Game_window::write_gwin() {
+  *  Output: 0 if error.
+  */
+ 
++#ifdef N3DS_PORT
++extern "C" volatile unsigned n3ds_load_gen;    // 3ds/n3ds_bottom.cc: bumped on every game load (EX-11)
++#endif
+ void Game_window::read_gwin() {
++#ifdef N3DS_PORT
++	n3ds_load_gen = n3ds_load_gen + 1;
++#endif
+ 	if (!clock->in_queue()) {    // Be sure clock is running.
+ 		tqueue->add(Game::get_ticks(), clock, this);
+ 	}
 diff --git a/gumps/GameDisplayOptions_gump.cc b/gumps/GameDisplayOptions_gump.cc
 index 25d37b5..da79c38 100644
 --- a/gumps/GameDisplayOptions_gump.cc

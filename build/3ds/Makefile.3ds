@@ -11,6 +11,8 @@ ARCH     := -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
 SERVER_OBJS := server/objserial.o server/servemsg.o server/server.o
 THREEDS_OBJS := 3ds/n3ds_platform.o 3ds/n3ds_bottom.o 3ds/n3ds_stereo.o 3ds/n3ds_frontend.o 3ds/selftest.o
 OBJS     += $(THREEDS_OBJS)
+# EX-14: the port's own files build with -Wall (Exult's own files are left as upstream has them)
+$(THREEDS_OBJS): CXXFLAGS += -Wall
 
 # PORT_VERSION: git describe of exult-3ds (build.sh passes it), shown in the START menu
 PORT_VERSION ?= unknown
