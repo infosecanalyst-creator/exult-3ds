@@ -119,6 +119,7 @@ static const char* lh(const char* s) {
 		{"D-Pad down or B: close", "B or D-Down: close"},
 		{"D-Pad < >  pages      B  close", "X / A  pages      D-Down  close"},
 		{"Sticks: scroll   D-Pad, L / R: section   B / START: close", "Sticks: scroll   A/B/X/Y, L / R: section   D-Down / START: close"},
+		{"Sticks: scroll  D-Pad, L/R: section  B/START: close", "Sticks: scroll  ABXY, L/R: section  D-Dn/START: close"},
 	};
 	if (!g_lefty_loaded) lefty_load();
 	if (!g_lefty || !s) return s;
@@ -1488,7 +1489,15 @@ namespace {
 			target->fill8(C_EDGE, 3, th, PW - 5, ty);
 		}
 		target->fill8(C_PANEL, PW, 16, 0, H - 16);
-		text_centered(0, lh("Sticks: scroll   D-Pad, L / R: section   B / START: close"), PW / 2, H - 14, PW - 8);
+		{
+			// the house footer wording; a tighter spelling when it would not fit (the 320 px screen)
+			const char* foot = lh("Sticks: scroll   D-Pad, L / R: section   B / START: close");
+			auto        ff   = font(0);
+			if (ff && ff->get_text_width(foot) > PW - 8) {
+				foot = lh("Sticks: scroll  D-Pad, L/R: section  B/START: close");
+			}
+			text_centered(0, foot, PW / 2, H - 14, PW - 8);
+		}
 	}
 
 	// ---- Menu pop-up -----------------------------------------------------------
