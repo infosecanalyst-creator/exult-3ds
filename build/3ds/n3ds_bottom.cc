@@ -1631,9 +1631,19 @@ namespace {
 			target->fill8(C_BG, w - 2, h - 2, x + 1, y + 1);
 			const std::string why = std::string(label) + (modal_busy() == 2 ? " - close the book first" : " - finish the talk first");
 			text_centered(0, why.c_str(), x + w / 2, y + (h - 9) / 2, w - 8);
-			for (int yy = y + 1; yy < y + h - 1; yy++) {    // dim the label: every other pixel back to the face
-				for (int xx = x + 1 + (yy & 1); xx < x + w - 1; xx += 2) {
-					target->fill8(C_BG, 1, 1, xx, yy);
+			// grey label: the font only paints light letters with a dark outline, so every light
+			// pixel inside the button becomes a mid grey-blue (still readable, clearly not active)
+			const unsigned char grey = nearest(120, 130, 160);
+			for (int yy = y + 1; yy < y + h - 1; yy++) {
+				for (int xx = x + 1; xx < x + w - 1; xx++) {
+					const unsigned char px = target->get_pixel8(xx, yy);
+					if (px == C_BG) {
+						continue;
+					}
+					const uint32_t c = rgb32[px];
+					if (((c >> 24) & 255) + ((c >> 16) & 255) + ((c >> 8) & 255) > 300) {
+						target->put_pixel8(grey, xx, yy);
+					}
 				}
 			}
 			if (i == pm_focus && pressed_id < 0) {
