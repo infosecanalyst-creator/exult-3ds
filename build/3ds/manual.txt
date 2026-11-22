@@ -29,7 +29,7 @@ When Exult starts, the start screen appears right away:
 The game then loads straight into play. "Exult's own menus" opens Exult's usual menus instead, for the introduction, the credits and mods. "Exit to the Homebrew Launcher" leaves. B goes back a screen where there is one to go back to.
 
 ## New Game with a game in progress
-A new game takes the place of the game in progress. The start screen asks first ("Start a new game?", the choice starts on NO). If you say YES, the old game is kept: it is written to a new save called "Before new game", and Load Game brings it back. If that save cannot be written (SD card full), no new game is started and the old game carries on.
+A new game takes the place of the game in progress. The start screen asks first ("Start a new game?", the choice starts on NO). If you say YES, the old game is kept: it is written to a new save called "Before new game", and Load Game brings it back. If that save cannot be written (SD card full), no new game is started and the old game carries on. A game in progress that was never saved at all (no quicksave, autosave or exit save yet) is still just a fresh start, so there is nothing to keep.
 
 ## Loading
 The top screen shows "Loading" with a bar that moves while the game reads the SD card. A new game unpacks its working files to the SD card, which takes a little while. Continue and Load are quicker.

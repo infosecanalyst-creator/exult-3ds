@@ -323,7 +323,8 @@ namespace {
 		t.fill(60, 98, TW - 120, 1, C_EDGE);
 		int y = 108;
 		for (const auto& l : lines) {
-			t.text_c(l, TW / 2, y, 1, l.rfind("!", 0) == 0 ? C_RED : C_DIM);
+			const bool warn = l.rfind("!", 0) == 0;    // a leading "!" marks a warning line; it is not drawn
+			t.text_c(warn ? l.substr(1) : l, TW / 2, y, 1, warn ? C_RED : C_DIM);
 			y += 15;
 		}
 		(void)s;

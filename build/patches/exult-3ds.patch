@@ -776,10 +776,10 @@ index 6f68316..6321850 100644
  	do {
  		DIR* dir = opendir(name.c_str());    // Try to open
 diff --git a/game.cc b/game.cc
-index 66adab6..11f08f1 100644
+index 66adab6..7055d32 100644
 --- a/game.cc
 +++ b/game.cc
-@@ -40,6 +40,13 @@
+@@ -40,6 +40,14 @@
  #include "gamemgr/devgame.h"
  #include "gamemgr/modmgr.h"
  #include "gamemgr/sigame.h"
@@ -787,13 +787,14 @@ index 66adab6..11f08f1 100644
 +#	include "miscinf.h"
 +#	include "fnames.h"
 +#	include <cstdio>
++#	include <exception>
 +#	include <iostream>
 +class Game_object;
 +#endif
  #include "gamewin.h"
  #include "istring.h"
  #include "items.h"
-@@ -569,7 +576,94 @@ bool Game::read_game_xml(const char* name1) {
+@@ -569,7 +577,104 @@ bool Game::read_game_xml(const char* name1) {
  	return true;
  }
  
@@ -809,6 +810,13 @@ index 66adab6..11f08f1 100644
 +static bool n3ds_keep_game_in_progress(Game_window* gwin) {
 +	if (!U7exists(IDENTITY)) {
 +		return true;    // no game in progress: nothing to keep
++	}
++	if (!U7exists(GWINDAT) || !U7exists(GSAVEINFO)) {
++		// A game that was started but never saved (no quicksave, autosave or exit save yet):
++		// its files are still exactly a new game's. There is nothing to keep, and such a
++		// folder cannot be packed into a save.
++		std::cout << "[exult-3ds] new game: the game in progress was never saved; nothing to keep" << std::endl;
++		return true;
 +	}
 +	const char* tag = Game::get_game_type() == BLACK_GATE ? "bg" : Game::get_game_type() == SERPENT_ISLE ? "si" : "dev";
 +	char        fname[64];
@@ -827,6 +835,9 @@ index 66adab6..11f08f1 100644
 +	bool           ok       = true;
 +	try {
 +		gwin->save_gamedat(fname, "Before new game");
++	} catch (const std::exception& e) {
++		std::cout << "[exult-3ds] new game: keeping the old game failed: " << e.what() << std::endl;
++		ok = false;
 +	} catch (...) {
 +		ok = false;
 +	}
