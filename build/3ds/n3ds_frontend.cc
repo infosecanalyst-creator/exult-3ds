@@ -285,9 +285,34 @@ namespace {
 		}
 	}
 
-	enum Screen { PICK, ACTIONS, NEWGAME, LOAD };
+	enum Screen { PICK, ACTIONS, NEWGAME, LOAD, CONFIRM };
 
-	void draw_top(Canvas& t, Screen s, int g, const std::vector<std::string>& lines) {
+	// Left-handed play (the same marker file the game uses): the D-Pad and A/B/X/Y swap jobs.
+	bool lefty_on() {
+		struct stat sb;
+		return stat("sdmc:/3ds/exult/.lefty", &sb) == 0;
+	}
+	u32 remap(u32 m, bool lefty) {
+		if (!lefty) {
+			return m;
+		}
+		static const u32 pr[4][2] = {{KEY_Y, KEY_DUP}, {KEY_A, KEY_DRIGHT}, {KEY_B, KEY_DDOWN}, {KEY_X, KEY_DLEFT}};
+		u32 r = m;
+		for (auto& p : pr) {
+			r &= ~(p[0] | p[1]);
+		}
+		for (auto& p : pr) {
+			if (m & p[0]) {
+				r |= p[1];
+			}
+			if (m & p[1]) {
+				r |= p[0];
+			}
+		}
+		return r;
+	}
+
+	void draw_top(Canvas& t, Screen s, int g, const std::vector<std::string>& lines, bool can_back, bool lefty) {
 		std::fill(t.px.begin(), t.px.end(), C_BG);
 		// house header bar (22 px) and hint strip (16 px at y 224)
 		t.fill(0, 0, TW, 22, C_PANEL);
@@ -303,7 +328,61 @@ namespace {
 		}
 		(void)s;
 		t.fill(0, H - 16, TW, 16, C_HINT);
-		t.text_c("Tap a button, or D-Pad and A    B: back", TW / 2, H - 12, 1, C_GOLD);
+		// EXULT-Q6: "back" is only named where it does something; left-hand mode names its own buttons
+		const std::string hint = std::string(lefty ? "Tap a button, or A/B/X/Y and D-Right" : "Tap a button, or D-Pad and A")
+								 + (can_back ? (lefty ? "    D-Down: back" : "    B: back") : "");
+		t.text_c(hint, TW / 2, H - 12, 1, C_GOLD);
+	}
+
+	// ---- The loading page (top screen) while Exult starts the chosen game --------
+	// EXULT-U4 / X4: the same look as the start screen instead of the raw text console, and a
+	// bar that moves while the game reads the SD card, so loading can be told from a hang.
+	bool     loading_on   = false;
+	bool     loading_new  = false;
+	int      loading_game = 0;
+	unsigned loading_step = 0;
+	u64      loading_last = 0;
+	u32      main_thread  = 0;
+	bool     no_sound     = false;
+
+	void draw_loading() {
+		Canvas t(TW);
+		t.fill(0, 0, TW, 22, C_PANEL);
+		t.fill(0, 22, TW, 1, C_EDGE);
+		t.text("Ultima VII", 8, 7, 1, C_GOLD);
+		t.text_c("Loading", TW / 2, 34, 2, C_GOLD);
+		t.text_c(loading_game > 0 ? games[loading_game - 1].title : "Ultima VII", TW / 2, 60, 1, C_TEXT);
+		// the bar: a gold block that walks along the track each time the game touches the SD card
+		const int bx = 80, bw = TW - 160, by = 78, blk = 48;
+		t.fill(bx, by, bw, 8, C_EDGE);
+		t.fill(bx + 1, by + 1, bw - 2, 6, C_OFF);
+		const int span = bw - 2 - blk;
+		int       pos  = static_cast<int>(loading_step * 6 % static_cast<unsigned>(2 * span));
+		if (pos > span) {
+			pos = 2 * span - pos;
+		}
+		t.fill(bx + 1 + pos, by + 1, blk, 6, C_GOLD);
+		t.text_c(loading_new ? "A new game takes about a minute the first time." : "This can take a minute.", TW / 2, 94, 1, C_DIM);
+		t.fill(60, 112, TW - 120, 1, C_EDGE);
+		static const char* const lines[] = {
+				"The game is on the touchscreen:",
+				"tap = click, double-tap = use or talk,",
+				"hold the stylus still = walk there, drag = move items.",
+				"",
+				"START: menu and manual.   ZL: swap the screens.",
+				"L+R: zoom the touchscreen in and out.",
+		};
+		int y = 122;
+		for (const char* l : lines) {
+			t.text_c(l, TW / 2, y, 1, C_TEXT);
+			y += 14;
+		}
+		if (no_sound) {
+			t.text_c("No sound: sdmc:/3ds/dspfirm.cdc is missing (run DSP1 once).", TW / 2, 208, 1, C_RED);
+		}
+		t.fill(0, H - 16, TW, 16, C_HINT);
+		t.text_c("Log: sdmc:/3ds/exult/exult.log", TW / 2, H - 12, 1, C_GOLD);
+		t.present(GFX_TOP);
 	}
 
 	bool keyboard(std::string& name) {
@@ -341,6 +420,10 @@ extern "C" void n3ds_frontend_run() {
 	gfxSetScreenFormat(GFX_BOTTOM, GSP_RGBA8_OES);
 	gfxSetDoubleBuffering(GFX_BOTTOM, true);
 
+	svcGetThreadId(&main_thread, CUR_THREAD_HANDLE);
+	no_sound = !exists("sdmc:/3ds/dspfirm.cdc");
+	const bool lefty = lefty_on();    // EXULT-Q6: the start screen follows left-hand mode too
+
 	Canvas            top(TW), bot(BW);
 	Screen            screen = installed == 1 ? ACTIONS : PICK;
 	int               g      = installed == 1 ? only : 0;
@@ -365,7 +448,8 @@ extern "C" void n3ds_frontend_run() {
 				k.enabled = games[i].installed;
 				b.push_back(k);
 			}
-			b.push_back({10, 176, BW - 20, 32, "Exult's own menus (intro, credits, mods)", "", 9});
+			b.push_back({10, 166, BW - 20, 30, "Exult's own menus (intro, credits, mods)", "", 9});
+			b.push_back({10, 202, BW - 20, 30, "Exit to the Homebrew Launcher", "", 8});    // EXULT-Q6
 			info = {"Pick a game on the touchscreen.", "", "Your games are read from the SD card:",
 					"sdmc:/3ds/exult/blackgate and /serpentisle"};
 			break;
@@ -381,9 +465,14 @@ extern "C" void n3ds_frontend_run() {
 			b.push_back(ld);
 			if (installed > 1) {
 				b.push_back({10, 184, BW - 20, 32, "Back", "", 0});
+			} else {
+				b.push_back({10, 184, BW - 20, 32, "Exit to the Homebrew Launcher", "", 8});    // EXULT-Q6
 			}
-			info = {gi.in_progress ? "Continue picks up the game in progress." : "Start a new game, or load a saved one.",
-					"New Game starts in Trinsic, as the Avatar arrives.", "", "In the game, L+Y opens the manual."};
+			// EXULT-X1 / X2: say what Continue is, and name START (the menu on every port)
+			info = {gi.in_progress ? "Continue picks up the game in progress:" : "Start a new game, or load a saved one.",
+					gi.in_progress ? "where you last stopped (exit save, quicksave, autosave)." : "New Game starts in Trinsic, as the Avatar arrives.",
+					gi.in_progress ? "Load Game has the saves you named yourself." : "",
+					"", "In the game, START opens the menu and the manual."};
 			break;
 		}
 		case NEWGAME: {
@@ -404,6 +493,17 @@ extern "C" void n3ds_frontend_run() {
 			b.push_back({10, 200, BW - 20, 32, "Back", "", 0});
 			info = {"Name: " + chosen_name, std::string(chosen_female ? "Female" : "Male") + ", " + skins[chosen_skin] + " skin", "",
 					"The skin choice applies where the game", "has portraits for it."};
+			break;
+		}
+		case CONFIRM: {
+			// EXULT-Q2: New Game replaces the game in progress (the exit save, the quicksave and
+			// the autosave all live there). Ask first, focus on NO; the old game is kept as a
+			// saved game (game.cc writes it before the new one is unpacked).
+			const GameInfo& gi = games[g - 1];
+			b.push_back({10, 150, (BW - 30) / 2, 44, "YES, new game", "", 11});
+			b.push_back({20 + (BW - 30) / 2, 150, (BW - 30) / 2, 44, "NO", "", 0});
+			info = {"!A game is in progress.", when(gi.last).empty() ? std::string("") : "Last played " + when(gi.last), "",
+					"A new game takes its place. The old one is kept:", "Load Game, \"Before new game\"."};
 			break;
 		}
 		case LOAD: {
@@ -434,7 +534,7 @@ extern "C" void n3ds_frontend_run() {
 
 		// Input.
 		hidScanInput();
-		const u32 down = hidKeysDown(), held = hidKeysHeld();
+		const u32 down = remap(hidKeysDown(), lefty), held = hidKeysHeld();
 		int       activate = -1;
 		touchPosition tp;
 		hidTouchRead(&tp);
@@ -480,8 +580,12 @@ extern "C" void n3ds_frontend_run() {
 			activate = focus;
 		}
 		int id = activate >= 0 ? b[activate].id : -1;
-		if ((down & KEY_B) && screen != PICK && !(screen == ACTIONS && installed == 1)) {
+		const bool can_back = screen != PICK && !(screen == ACTIONS && installed == 1);
+		if ((down & KEY_B) && can_back) {
 			id = 0;
+		}
+		if (id == 8) {    // EXULT-Q6: Exit to the Homebrew Launcher (nothing is loaded yet, nothing to save)
+			exit(0);
 		}
 
 		// Act.
@@ -523,7 +627,20 @@ extern "C" void n3ds_frontend_run() {
 				} else if (id >= 4 && id <= 6) {
 					chosen_skin = id - 4;
 				} else if (id == 10) {
+					if (games[g - 1].in_progress) {
+						screen = CONFIRM;
+						focus  = 1;    // NO
+					} else {
+						chosen_game = g, chosen_action = 2;
+					}
+				}
+				break;
+			case CONFIRM:
+				if (id == 11) {
 					chosen_game = g, chosen_action = 2;
+				} else {
+					screen = NEWGAME;
+					focus  = 6;
 				}
 				break;
 			case LOAD:
@@ -547,6 +664,10 @@ extern "C" void n3ds_frontend_run() {
 				bot.text_c(games[g - 1].title, BW / 2, 126, 1, C_TEXT);
 				bot.text_c("This can take a minute.", BW / 2, 150, 1, C_DIM);
 				bot.present(GFX_BOTTOM);
+				loading_on   = true;
+				loading_new  = chosen_action == 2;
+				loading_game = g;
+				draw_loading();
 				return;
 			}
 			continue;
@@ -554,10 +675,16 @@ extern "C" void n3ds_frontend_run() {
 
 		// Draw.
 		std::fill(bot.px.begin(), bot.px.end(), C_BG);
+		if (screen == CONFIRM) {
+			bot.text_c("Start a new game?", BW / 2, 40, 2, C_GOLD);
+			bot.text_c("It replaces the game in progress.", BW / 2, 78, 1, C_TEXT);
+			bot.text_c("The old game is kept as a saved game:", BW / 2, 98, 1, C_DIM);
+			bot.text_c("Load Game, \"Before new game\".", BW / 2, 112, 1, C_DIM);
+		}
 		for (size_t i = 0; i < b.size(); i++) {
 			draw_button(bot, b[i], static_cast<int>(i) == focus, static_cast<int>(i) == pressed);
 		}
-		draw_top(top, screen, g, info);
+		draw_top(top, screen, g, info, can_back, lefty);
 		top.present(GFX_TOP);
 		bot.present(GFX_BOTTOM);
 		gspWaitForVBlank();
@@ -583,4 +710,41 @@ extern "C" bool n3ds_frontend_take(int* action, const char** name, int* female, 
 	*skin   = chosen_skin;
 	*save   = chosen_save.c_str();
 	return true;
+}
+
+// n3ds_platform.cc (n3ds_show_legend): true when the start screen's own loading page is in use,
+// so the raw text console is not put over it (EXULT-U4).
+extern "C" int n3ds_frontend_loading(void) {
+	if (!loading_on) {
+		return 0;
+	}
+	u32 tid = 0;
+	svcGetThreadId(&tid, CUR_THREAD_HANDLE);
+	if (tid != main_thread) {
+		return 1;
+	}
+	const u64 now = osGetTime();
+	if (now - loading_last >= 150) {    // at most ~7 redraws a second
+		loading_last = now;
+		loading_step++;
+		if (gfxGetScreenFormat(GFX_TOP) != GSP_RGBA8_OES) {
+			gfxSetScreenFormat(GFX_TOP, GSP_RGBA8_OES);
+			gfxSetDoubleBuffering(GFX_TOP, true);
+		}
+		draw_loading();
+	}
+	return 1;
+}
+
+// n3ds_platform.cc: called whenever the game opens a file on the SD card (EXULT-X4): the
+// loading bar moves, so a slow card looks like loading and not like a hang.
+extern "C" void n3ds_frontend_pulse(void) {
+	if (loading_on) {
+		n3ds_frontend_loading();
+	}
+}
+
+// n3ds_bottom.cc: the game is on screen; the loading page is over.
+extern "C" void n3ds_frontend_loading_done(void) {
+	loading_on = false;
 }

@@ -14,8 +14,8 @@ The original game was played with a mouse. This port is built for the stylus:
   - conversations, books, signs, the world map and the party's stats, so nothing covers the game while you read.
 - **Readable text:** a pixel font drawn for the 3DS screen replaces the original blackletter and its yellow. It's light grey with a black outline, and conversations get a dark box behind them, like TV subtitles.
 - **Stereoscopic 3D:** swap the game onto the top screen and the 3D slider gives the world real depth. Roofs, trees and walls rise out of the screen.
-- **A start screen:** pick Black Gate or Serpent Isle, then Continue, New Game (name your Avatar) or Load Game, and go straight into play.
-- **A full instruction manual in the game** (L+Y). Circle Pad or C-Stick scroll it, the D-Pad moves between sections, L/R page through them, B closes it.
+- **A start screen:** pick Black Gate or Serpent Isle, then Continue, New Game (name your Avatar) or Load Game, and go straight into play. New Game over a game in progress asks first and keeps the old game as the save "Before new game".
+- **A full instruction manual in the game** (START > MANUAL, or L+Y). Circle Pad or C-Stick scroll it, the D-Pad moves between sections, L/R page through them, B closes it.
 - **Safe exit:** EXIT GAME and HOME > Close quicksave first (keeping a gamedat.bak copy); if a save is not possible you are asked EXIT ANYWAY / NO. `exult.cfg` is written to a temporary file and renamed, with the old one kept as `exult.cfg.bak`.
 - **Install and update over Wi-Fi** from a Windows PC. There's no need to take the SD card out, and saves can sync both ways with Exult on the PC.
 
@@ -113,7 +113,7 @@ The full instruction manual is in the game: press **L+Y**, or tap the menu butto
 | SELECT | Quicksave |
 | L+Y | Manual |
 | Hold L + D-Pad | ↑ Watch · ↓ Pause combat · ← Lockpick · → Food |
-| L+SELECT / L+X | Quick-restore / Next music track |
+| L+SELECT / L+X | Quick-restore (asks first) / Next music track |
 | 3D slider | Stereoscopic depth while the game is on the top screen (off at the bottom) |
 
 Typing (the Avatar's name, save names) uses the 3DS keyboard.
@@ -135,9 +135,9 @@ Option **6** in `Exult-3DS.cmd` syncs saves both ways with Exult on the PC:
 - It reads the PC's save folders from your PC `exult.cfg`. The default location is `C:\Ultima\Config\exult.cfg`; use `-PcExultCfg` to point elsewhere.
 - It covers the base games and every mod.
 - It **never deletes or silently overwrites a save.** If a slot changed on both machines, both versions are kept, in separate slots.
-- If the 3DS has no game in progress yet, it also copies the PC's current game, so **Journey Onward** works straight away.
+- If the 3DS has no game in progress yet, it also copies the PC's current game, so **Continue** works straight away.
 
-**Autosave:** every 15 minutes, while you're not in dialogue, in a window or in combat, the game in progress is quicksaved. Journey Onward resumes from it.
+**Autosave:** every 15 minutes, while you're not in dialogue, in a window or in combat, the game in progress is quicksaved (if you are busy it tries again 30 seconds later). Continue on the start screen resumes from it.
 
 ### Defaults (`sdmc:/3ds/exult/exult.cfg`)
 

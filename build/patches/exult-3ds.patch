@@ -58,7 +58,7 @@ index 9159c91..cd4efed 100644
  	try {
  		pOfile = U7open_out(filename.c_str(), true);
 diff --git a/effects.cc b/effects.cc
-index 5142fb6..e224b24 100644
+index 5142fb6..5965526 100644
 --- a/effects.cc
 +++ b/effects.cc
 @@ -1,3 +1,4 @@
@@ -66,7 +66,17 @@ index 5142fb6..e224b24 100644
  /*
   *  effects.cc - Special effects.
   *
-@@ -85,10 +86,17 @@ Effects_manager::~Effects_manager() {
+@@ -23,6 +24,9 @@
+ #endif
+ 
+ #include "effects.h"
++#ifdef N3DS_PORT
++#	include <algorithm>
++#endif
+ 
+ #include "Audio.h"
+ #include "AudioMixer.h"
+@@ -85,10 +89,17 @@ Effects_manager::~Effects_manager() {
   *  @param item     Item text ID's, or null.
   */
  
@@ -84,7 +94,7 @@ index 5142fb6..e224b24 100644
  	// Don't duplicate for item.
  	if (std::find_if(
  				texts.cbegin(), texts.cend(),
-@@ -112,6 +120,9 @@ void Effects_manager::add_text(const char* msg, Game_object* item) {
+@@ -112,6 +123,9 @@ void Effects_manager::add_text(const char* msg, Game_object* item) {
   */
  
  void Effects_manager::add_text(const char* msg, int x, int y) {
@@ -93,6 +103,38 @@ index 5142fb6..e224b24 100644
 +#endif
  	texts.emplace_front(
  			std::make_unique<Text_effect>(msg, gwin->get_scrolltx() + x / c_tilesize, gwin->get_scrollty() + y / c_tilesize, gwin));
+ }
+@@ -1208,8 +1222,29 @@ void Text_effect::paint_to_layer() {
+ 	iwin->game_to_screen(pos.x + w / 2, pos.y + h / 2, false, csx, csy);
+ 	const float dw = static_cast<float>(w) * f;
+ 	const float dh = static_cast<float>(h) * f;
+-	const int   dx = static_cast<int>(static_cast<float>(csx) - dw / 2.0f);
+-	const int   dy = static_cast<int>(static_cast<float>(csy) - dh / 2.0f);
++	int         dx = static_cast<int>(static_cast<float>(csx) - dw / 2.0f);
++	int         dy = static_cast<int>(static_cast<float>(csy) - dh / 2.0f);
++#ifdef N3DS_PORT
++	// EXULT-U2: keep the words inside the game area. The 3DS touchscreen shows exactly the
++	// game area (320 of the 400-pixel window); text placed past its edge was cut ("peak to
++	// thee" for "Speak to thee").
++	{
++		int gx0;
++		int gy0;
++		int gx1;
++		int gy1;
++		iwin->game_to_screen(0, 0, false, gx0, gy0);
++		iwin->game_to_screen(iwin->get_game_width(), iwin->get_game_height(), false, gx1, gy1);
++		const int idw = static_cast<int>(dw);
++		const int idh = static_cast<int>(dh);
++		if (idw <= gx1 - gx0) {
++			dx = std::max(gx0, std::min(dx, gx1 - idw));
++		}
++		if (idh <= gy1 - gy0) {
++			dy = std::max(gy0, std::min(dy, gy1 - idh));
++		}
++	}
++#endif
+ 	gwin->layer_set_dest(text_layer, dx, dy, static_cast<int>(dw), static_cast<int>(dh));
+ 	gwin->layer_set_visible(text_layer, true);
  }
 diff --git a/exult.cc b/exult.cc
 index 4ba1584..26b3a59 100644
@@ -734,25 +776,71 @@ index 6f68316..6321850 100644
  	do {
  		DIR* dir = opendir(name.c_str());    // Try to open
 diff --git a/game.cc b/game.cc
-index 66adab6..0d68c62 100644
+index 66adab6..11f08f1 100644
 --- a/game.cc
 +++ b/game.cc
-@@ -40,6 +40,9 @@
+@@ -40,6 +40,13 @@
  #include "gamemgr/devgame.h"
  #include "gamemgr/modmgr.h"
  #include "gamemgr/sigame.h"
 +#ifdef N3DS_PORT
 +#	include "miscinf.h"
++#	include "fnames.h"
++#	include <cstdio>
++#	include <iostream>
++class Game_object;
 +#endif
  #include "gamewin.h"
  #include "istring.h"
  #include "items.h"
-@@ -569,7 +572,46 @@ bool Game::read_game_xml(const char* name1) {
+@@ -569,7 +576,94 @@ bool Game::read_game_xml(const char* name1) {
  	return true;
  }
  
 +#ifdef N3DS_PORT
 +extern "C" bool n3ds_frontend_take(int* action, const char** name, int* female, int* skin, const char** save);
++extern "C" volatile unsigned n3ds_write_failures;                  // 3ds/n3ds_platform.cc
++void n3ds_note_text(const char* msg, Game_object* item);    // 3ds/n3ds_bottom.cc: message log
++
++// EXULT-Q2: New Game replaces the game in progress (the exit save, the quicksave and the
++// autosave all live only there). Before the new game is unpacked, the game in progress is
++// written to the first free save slot as "Before new game", so Load Game can bring it back.
++// False = it could not be kept (card full?): the caller then does not start the new game.
++static bool n3ds_keep_game_in_progress(Game_window* gwin) {
++	if (!U7exists(IDENTITY)) {
++		return true;    // no game in progress: nothing to keep
++	}
++	const char* tag = Game::get_game_type() == BLACK_GATE ? "bg" : Game::get_game_type() == SERPENT_ISLE ? "si" : "dev";
++	char        fname[64];
++	int         slot = -1;
++	for (int i = 0; i < 1000; i++) {
++		snprintf(fname, sizeof(fname), SAVENAME, i, tag);
++		if (!U7exists(fname)) {
++			slot = i;
++			break;
++		}
++	}
++	if (slot < 0) {
++		return false;
++	}
++	const unsigned failures = n3ds_write_failures;
++	bool           ok       = true;
++	try {
++		gwin->save_gamedat(fname, "Before new game");
++	} catch (...) {
++		ok = false;
++	}
++	if (ok && (n3ds_write_failures != failures || !U7exists(fname))) {
++		ok = false;
++	}
++	if (!ok) {
++		U7remove(fname);
++		std::cout << "[exult-3ds] new game: the game in progress could NOT be kept as a save; new game not started" << std::endl;
++		return false;
++	}
++	std::cout << "[exult-3ds] new game: the game in progress was kept as save " << slot << " (Before new game)" << std::endl;
++	return true;
++}
 +#endif
 +
  bool Game::show_menu(bool skip) {
@@ -763,7 +851,13 @@ index 66adab6..0d68c62 100644
 +		const char* name = nullptr;
 +		const char* save = nullptr;
 +		if (n3ds_frontend_take(&action, &name, &female, &skin, &save)) {
-+			if (action == 2) {
++			if (action == 2 && !n3ds_keep_game_in_progress(gwin)) {
++				// the old game stays the game in progress; say why nothing new started
++				n3ds_note_text("New game NOT started: the old game could not be kept as a save (SD card full?).", nullptr);
++				if (gwin->init_gamedat(false)) {
++					return true;
++				}
++			} else if (action == 2) {
 +				const bool si_installed = gamemanager
 +										  && (gamemanager->is_si_installed() || gamemanager->is_ss_installed())
 +										  && U7exists("<SERPENT_STATIC>/shapes.vga");

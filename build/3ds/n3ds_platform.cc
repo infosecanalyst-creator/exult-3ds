@@ -541,9 +541,13 @@ static bool       sdm_in = false;
 static char         sdm_last[160];
 static volatile u64 sdm_ops = 0;
 
+extern "C" void n3ds_frontend_pulse(void);      // n3ds_frontend.cc: moves the loading bar (EXULT-X4)
+extern "C" int  n3ds_frontend_loading(void);    // n3ds_frontend.cc: its loading page is on the top screen
+
 static void sdm_mark(const char* what, const char* path) {
 	snprintf(sdm_last, sizeof sdm_last, "%s %s", what, path ? path : "?");
 	sdm_ops++;
+	n3ds_frontend_pulse();
 }
 
 static void sdm_note(const char* what, const char* path, u64 dt) {
@@ -1006,6 +1010,9 @@ void n3ds_bottom_init();
 // The top screen while Exult's own menus are up (they're on the touchscreen).
 extern "C" void n3ds_show_legend() {
 	if (linked_to_pc) {
+		return;
+	}
+	if (n3ds_frontend_loading()) {    // EXULT-U4: the styled loading page, not the raw console
 		return;
 	}
 	if (!console_ready) {

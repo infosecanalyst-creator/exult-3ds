@@ -22,14 +22,17 @@ The same steps install every update; only changed files are sent. You never need
 ## The start screen
 When Exult starts, the start screen appears right away:
 1. Pick The Black Gate or Serpent Isle (if only one is installed, it is picked for you).
-2. Continue: the game in progress.
+2. Continue: the game in progress, where you last stopped (the exit save, the quicksave and the autosave all go there).
 3. New Game: the name is Avatar unless you tap it to type another; pick male or female and a skin tone, then Start the game. You begin in Trinsic as the Avatar arrives.
-4. Load Game: your saves, newest first, by name and date.
+4. Load Game: the saves you named yourself, newest first, by name and date.
 
-The game then loads straight into play. "Exult's own menus" opens Exult's usual menus instead, for the introduction, the credits and mods.
+The game then loads straight into play. "Exult's own menus" opens Exult's usual menus instead, for the introduction, the credits and mods. "Exit to the Homebrew Launcher" leaves. B goes back a screen where there is one to go back to.
+
+## New Game with a game in progress
+A new game takes the place of the game in progress. The start screen asks first ("Start a new game?", the choice starts on NO). If you say YES, the old game is kept: it is written to a new save called "Before new game", and Load Game brings it back. If that save cannot be written (SD card full), no new game is started and the old game carries on.
 
 ## Loading
-A new game unpacks its working files to the SD card, which takes a little while. Continue and Load are quicker.
+The top screen shows "Loading" with a bar that moves while the game reads the SD card. A new game unpacks its working files to the SD card, which takes a little while. Continue and Load are quicker.
 
 # The two screens
 ## Bottom screen: the game
@@ -70,10 +73,14 @@ Small things are easier to hit zoomed in: press L+R (see Zoom, 3D and swapping).
 | START | Menu: resume, manual, save / load, game options, commands, left hand, exit game
 | SELECT | Quicksave
 | L+Y | This manual
-| L+SELECT | Quick-restore
+| L+SELECT | Quick-restore (asks first)
 | L+X | Next music track
 | L+D-Pad | Up watch, down pause combat, left lockpick, right food
 | 3D slider | Depth, when the game is on the top screen
+
+While the START menu or this manual is open, the buttons and sticks belong to it; nothing reaches the game.
+
+During a conversation, or while a book or sign is open, SAVE / LOAD and GAME OPTIONS in the START menu are greyed ("finish the talk first"): finish, then open them. SELECT does nothing then either.
 
 # The menu button
 The three bars in the top-right corner of the touchscreen open the menu.
@@ -114,15 +121,17 @@ ZL (or Swap screens in the commands menu) puts the game back on the top screen a
 3D works when the game is on the top screen: swap the screens, then push the 3D slider up. Roofs, trees and people rise out of the screen; windows and text stay flat.
 
 # Saving
-- SELECT quicksaves. L+SELECT restores the quicksave.
-- Save in the commands menu (or START, then SAVE / LOAD) keeps named saves.
-- The game autosaves every 15 minutes when you are not talking, fighting or in a window.
-- Journey Onward continues the game in progress.
+There are two kinds of save. The game in progress is one running save: the quicksave, the autosave and the exit save all write to it, and Continue on the start screen picks it up. Named saves are the ones you make yourself; Load Game on the start screen lists them.
+- SELECT quicksaves. L+SELECT goes back to the last quicksave; it asks first, because what you did since then is lost.
+- START, then SAVE / LOAD (or Save in the menu button's list) keeps named saves.
+- The game autosaves every 15 minutes when you are not talking, fighting or in a window. If you are, it tries again half a minute later.
+- Continue on the start screen continues the game in progress.
+- New Game never throws the game in progress away: it is kept as the save "Before new game".
 
 ## Leaving the game
-EXIT GAME in the START menu asks "Exit Ultima VII?". YES quicksaves first, then leaves. Closing Exult from the HOME menu (HOME, then Close) does the same.
+EXIT GAME in the START menu asks "Exit Ultima VII?". YES saves the game in progress first, then leaves; Continue picks it up next time. Closing Exult from the HOME menu (HOME, then Close) does the same.
 - Before it saves, the game keeps a copy of your last good game files as gamedat.bak. If the game files are ever damaged, the game starts from that copy.
-- It cannot save during a conversation, a fight or with a window open. EXIT GAME then says "Not saved!" and asks EXIT ANYWAY or NO. NO takes you back to the game: finish what you were doing and exit again. Closing from HOME in such a moment leaves at once without saving.
+- It cannot save during a conversation, a fight or with a window open. EXIT GAME then says "Not saved!" right away and asks EXIT ANYWAY or NO. NO takes you back to the game: finish what you were doing and exit again. Closing from HOME in such a moment leaves at once without saving.
 - If the save fails (SD card full?) you are asked the same way. The game never leaves after a failed save without asking.
 - The settings file (exult.cfg) is written to a temporary file and then renamed, and the old one is kept as exult.cfg.bak, so a failed write cannot lose your settings.
 

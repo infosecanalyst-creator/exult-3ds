@@ -44,6 +44,7 @@
 #include "ibuf8.h"
 #include "mouse.h"
 #include "n3ds_stereo.h"
+#include "fnames.h"
 #include "palette.h"
 #include "party.h"
 #include "schedule.h"
@@ -94,8 +95,9 @@ static void lefty_load() {
 static void lefty_set(bool on) {
 	g_lefty = on;
 	if (on) {
-		if (FILE* f = std::fopen("sdmc:/3ds/exult/.lefty", "w")) {
-			std::fclose(f);
+		FILE* f = std::fopen("sdmc:/3ds/exult/.lefty", "w");
+		if (!f || std::fclose(f) != 0) {    // EXULT-Q7: say so in the log; the setting then lasts until exit
+			std::printf("[exult-3ds] left-hand setting could not be written to the SD card\n");
 		}
 	} else {
 		std::remove("sdmc:/3ds/exult/.lefty");
@@ -120,6 +122,8 @@ static const char* lh(const char* s) {
 		{"D-Pad < >  pages      B  close", "X / A  pages      D-Down  close"},
 		{"Sticks: scroll   D-Pad, L / R: section   B / START: close", "Sticks: scroll   A/B/X/Y, L / R: section   D-Down / START: close"},
 		{"Sticks: scroll  D-Pad, L/R: section  B/START: close", "Sticks: scroll  ABXY, L/R: section  D-Dn/START: close"},
+		{"D-Pad: choose   A: select   B: back", "A/B/X/Y: choose   D-Right: select   D-Down: back"},    // EXULT-U1
+		{"X use   Y pack   START menu", "Left use   Up pack   START menu"},
 	};
 	if (!g_lefty_loaded) lefty_load();
 	if (!g_lefty || !s) return s;
@@ -127,6 +131,10 @@ static const char* lh(const char* s) {
 		if (!std::strcmp(s, p[0])) return p[1];
 	return s;
 }
+
+static bool exit_save_busy();    // below: a talk, a fight or an open window (no save possible)
+static int  modal_busy();        // below: 1 a talk, 2 reading a book or sign (keys sent to the game are eaten)
+extern "C" void n3ds_frontend_loading_done(void);    // n3ds_frontend.cc
 
 #ifndef N3DS_AUTOSAVE_MS
 #	define N3DS_AUTOSAVE_MS (15 * 60 * 1000)
@@ -264,7 +272,25 @@ namespace {
 	}
 
 	void load_palette(Game_window* gwin) {
-		Palette*  pal = gwin->get_pal();
+		Palette* pal = gwin->get_pal();
+		// EXULT-U3: the dashboard always uses the game's daylight palette (number 0), read from
+		// the game's palette file, never the live one: the red opening scene and the night
+		// made the tip banner and the info column unreadable until daylight was seen once.
+		Palette day;
+		if (pal->get_palette_index() != 0 || pal->get_brightness() != 100) {
+			try {
+				day.load(PALETTES_FLX, PATCH_PALETTES, 0);
+				bool any = false;
+				for (int i = 0; i < 256 && !any; i++) {
+					any = day.get_red(i) || day.get_green(i) || day.get_blue(i);
+				}
+				if (any) {
+					pal            = &day;
+					day_pal_cached = true;
+				}
+			} catch (...) {
+			}
+		}
 		const int mx  = pal->get_max_val() > 0 ? pal->get_max_val() : 63;
 		for (int i = 0; i < 256; i++) {
 			const int r = pal->get_red(i) * 255 / mx, g = pal->get_green(i) * 255 / mx, b = pal->get_blue(i) * 255 / mx;
@@ -776,7 +802,11 @@ namespace {
 		y += 3;
 		target->fill8(C_EDGE, sw, 1, sx, y);
 		y += 3;
-		const int line_h = 13, bottom = H - 3;    // 2 px clear of the edge: descenders (g, y) of the last line were cut
+		// EXULT-U5: a fixed button-hint strip at the bottom of the column (rule 15); the message
+		// log ends 4 px above it, so no descender touches anything.
+		target->fill8(C_PANEL, w - 1, 15, x0 + 1, H - 15);
+		text_centered(0, lh("X use   Y pack   START menu"), x0 + 1 + (w - 1) / 2, H - 13, w - 6);
+		const int line_h = 13, bottom = H - 15 - 4;
 		const int room   = (bottom - y) / line_h;
 		if (room <= 0) {
 			return;
@@ -1099,7 +1129,7 @@ namespace {
 			{"Tap an answer to reply.", "Tap the text to move it on."},
 			{"Combat! R turns it on and off.", "Hold L + D-Pad down to pause."},
 			{"A tag on a portrait means trouble:", "FOOD = hungry, PSN = poisoned."},
-			{"ZL swaps screens. L+R zooms 1.5x, 2x.", "L+Y opens the manual on this screen."},
+			{"ZL swaps screens. L+R zooms 1.5x, 2x.", "START opens the menu and the manual."},
 			{"3D: ZL puts the game on the", "top screen. ZL again swaps back."},
 	};
 
@@ -1548,7 +1578,15 @@ namespace {
 		for (int i = 0; i < n; i++) {
 			const int bx = MP_X + 4 + (i % 2) * bw, by = gy + (i / 2) * bh;
 			const int id = ID_SEC + i;
-			panel(bx + 2, by + 2, bw - 4, bh - 4, i == help_page || pressed_id == id);
+			// EXULT-U6: the section being read gets the 2 px gold ring (as in the START menu), not
+			// a gold face: the outlined white label looked smudged on gold.
+			panel(bx + 2, by + 2, bw - 4, bh - 4, pressed_id == id);
+			if (i == help_page && pressed_id != id) {
+				target->fill8(C_GOLD, bw - 4, 2, bx + 2, by + 2);
+				target->fill8(C_GOLD, bw - 4, 2, bx + 2, by + bh - 4);
+				target->fill8(C_GOLD, 2, bh - 4, bx + 2, by + 2);
+				target->fill8(C_GOLD, 2, bh - 4, bx + bw - 4, by + 2);
+			}
 			text_centered(0, manual[i].title.c_str(), bx + bw / 2, by + bh / 2 - 6, bw - 8);
 			mhits.push_back({bx, by, bw, bh, SDLK_UNKNOWN, SDL_KMOD_NONE, id});
 		}
@@ -1557,7 +1595,7 @@ namespace {
 	// ---- START port menu (house style, claude/3ds-look-and-feel.md) -----------------
 	enum { ID_PM = 600 };
 	bool pm_open  = false;
-	int  pm_page  = 0;    // 0 items, 1 exit confirm, 2 exit save failed or not possible (EX-03)
+	int  pm_page  = 0;    // 0 items, 1 exit confirm, 2 exit save failed or not possible (EX-03), 3 quick-restore confirm
 	bool pm_cant_save = false;   // page 2: true = unsafe moment (talk, fight, open window), false = write failed
 	int  pm_focus = 0;
 	enum { PM_RESUME, PM_MANUAL, PM_SAVE, PM_OPTIONS, PM_COMMANDS, PM_LEFTY, PM_EXIT, PM_COUNT };
@@ -1577,10 +1615,36 @@ namespace {
 		}
 	}
 
+	// EXULT-Q1 / X5: SAVE / LOAD and GAME OPTIONS send a key to the game. During a talk, or
+	// while a book or sign is open, the game takes any key as "continue": a line was skipped
+	// unread and no window opened. They are greyed then, with the reason on the button.
+	bool pm_disabled(int i) {
+		return pm_page == 0 && (i == PM_SAVE || i == PM_OPTIONS) && modal_busy() != 0;
+	}
+
 	void pm_button(int i, const char* label) {
 		int x, y, w, h;
 		pm_rect(i, x, y, w, h);
 		const int id = ID_PM + i;
+		if (pm_disabled(i)) {
+			target->fill8(C_DIM, w, h, x, y);
+			target->fill8(C_BG, w - 2, h - 2, x + 1, y + 1);
+			const std::string why = std::string(label) + (modal_busy() == 2 ? " - close the book first" : " - finish the talk first");
+			text_centered(0, why.c_str(), x + w / 2, y + (h - 9) / 2, w - 8);
+			for (int yy = y + 1; yy < y + h - 1; yy++) {    // dim the label: every other pixel back to the face
+				for (int xx = x + 1 + (yy & 1); xx < x + w - 1; xx += 2) {
+					target->fill8(C_BG, 1, 1, xx, yy);
+				}
+			}
+			if (i == pm_focus && pressed_id < 0) {
+				target->fill8(C_GOLD, w, 1, x, y);
+				target->fill8(C_GOLD, w, 1, x, y + h - 1);
+				target->fill8(C_GOLD, 1, h, x, y);
+				target->fill8(C_GOLD, 1, h, x + w - 1, y);
+			}
+			mhits.push_back({x, y, w, h, SDLK_UNKNOWN, SDL_KMOD_NONE, id});
+			return;
+		}
 		const bool pressed = pressed_id == id;
 		const int off = pressed ? 1 : 0;
 		panel(x, y + off, w, h, pressed);
@@ -1601,7 +1665,7 @@ namespace {
 		}
 		target->fill8(C_BG, GAME_W, H, 0, 0);
 		target->fill8(C_PANEL, GAME_W, 22, 0, 0);
-		text(0, pm_page == 0 ? "MENU" : "EXIT GAME", 8, 7);
+		text(0, pm_page == 0 ? "MENU" : pm_page == 3 ? "QUICK-RESTORE" : "EXIT GAME", 8, 7);
 		if (pm_page == 0) {    // port version (git describe of exult-3ds), right of the title
 			if (auto f = font(0)) {
 				const char* v = "Build " PORT_VERSION;
@@ -1619,9 +1683,17 @@ namespace {
 				text_centered(0, pm_cant_save ? "or with a window open. Exit anyway?" : "Exit anyway? Progress is lost.", GAME_W / 2, 96, GAME_W - 16);
 				pm_button(0, "EXIT ANYWAY");
 				pm_button(1, "NO");
+			} else if (pm_page == 3) {
+				text_centered(0, "Go back to the last quicksave?", GAME_W / 2, 64, GAME_W - 16);
+				text_centered(0, "(SELECT, the autosave or the exit save.)", GAME_W / 2, 82, GAME_W - 16);
+				text_centered(0, "What you did since then is lost.", GAME_W / 2, 100, GAME_W - 16);
+				pm_button(0, "YES");
+				pm_button(1, "NO");
 			} else {
-				text_centered(0, "Exit Ultima VII?", GAME_W / 2, 70, GAME_W - 16);
-				text_centered(0, "It is quicksaved first when it can be.", GAME_W / 2, 90, GAME_W - 16);
+				// EXULT-X1: say where the exit save goes and how to get back to it
+				text_centered(0, "Exit Ultima VII?", GAME_W / 2, 60, GAME_W - 16);
+				text_centered(0, "It is saved first as the game in progress;", GAME_W / 2, 82, GAME_W - 16);
+				text_centered(0, "Continue picks it up next time.", GAME_W / 2, 98, GAME_W - 16);
 				pm_button(0, "YES");
 				pm_button(1, "NO");
 			}
@@ -2008,7 +2080,8 @@ extern "C" void N3DS_BottomView(int* sx, int* sy, int* sw, int* sh) {
 
 // While the manual is open the sticks scroll it: the game sees them centred.
 extern "C" int N3DS_SticksBlocked(void) {
-	return in_game && help_page >= 0;
+	// EXULT-Q5: also while the START menu is open (the Avatar walked behind it)
+	return in_game && (help_page >= 0 || pm_open);
 }
 
 extern "C" void N3DS_CycleTarget(int dir) {
@@ -2132,6 +2205,22 @@ static bool exit_save_busy() {
 		   || (cv && (cv->get_num_faces_on_screen() > 0 || cv->are_choices_active()));
 }
 
+// 1 = a talk is on screen, 2 = a book, scroll or sign is open, 0 = neither. In both the game
+// reads any key as "continue", so keys must not be sent to it (EXULT-Q1).
+static int modal_busy() {
+	Game_window*  gw = Game_window::get_instance();
+	Conversation* cv = nullptr;
+	if (gw) {
+		if (Usecode_machine* uc = gw->get_usecode()) {
+			cv = uc->get_conversation();
+		}
+	}
+	if (cv && (cv->get_num_faces_on_screen() > 0 || cv->are_choices_active())) {
+		return 1;
+	}
+	return read_who ? 2 : 0;
+}
+
 static bool quit_watch(void*, SDL_Event* e) {
 	if (e->type != SDL_EVENT_QUIT || close_state != 0 || quitting_time != QUIT_TIME_NO) return true;
 	Game_window* gw = Game_window::get_instance();
@@ -2196,6 +2285,19 @@ static void close_watchdog() {
 
 // START port menu: act on item i of the current page
 static void pm_act(int i) {
+	if (pm_disabled(i)) {    // EXULT-Q1: greyed (a talk or a book is open): nothing is sent to the game
+		return;
+	}
+	if (pm_page == 3) {      // quick-restore: YES / NO
+		set_menu(false);
+		if (i == 0 && modal_busy() == 0) {
+			push_key(SDLK_R, SDL_KMOD_LCTRL);
+		}
+		menu_dirty    = true;
+		overlay_dirty = true;
+		last_draw     = 0;
+		return;
+	}
 	if (pm_page == 0) {
 		switch (i) {
 		case PM_RESUME:
@@ -2239,8 +2341,17 @@ static void pm_act(int i) {
 		// EX-06: not here (this runs inside SDL's input polling): the menu closes and
 		// n3ds_safe_point() saves on the main loop, then quits, or reopens this menu on
 		// page 2 when the save could not be made (EX-03: never quit silently).
-		set_menu(false);
-		exit_save_pending = true;
+		if (exit_save_busy()) {
+			// EXULT-Q3: the safe point is on the main loop, which does not run during a talk or
+			// with a window open: the menu used to close with nothing happening, and the game
+			// quit by itself when the talk ended. Say "Not saved!" at once instead.
+			pm_page      = 2;
+			pm_focus     = 1;    // NO
+			pm_cant_save = true;
+		} else {
+			set_menu(false);
+			exit_save_pending = true;
+		}
 	} else {
 		pm_page  = 0;
 		pm_focus = PM_EXIT;
@@ -2275,14 +2386,21 @@ extern "C" u32 N3DS_KeyHook(u32 kDown, u32 kHeld) {
 		const int n = pm_count();
 		if (kDown & (KEY_B | KEY_START)) {
 			click3ds::play();
-			if (pm_page != 0) {
+			if (pm_page == 3) {
+				set_menu(false);
+			} else if (pm_page != 0) {
 				pm_page  = 0;
 				pm_focus = PM_EXIT;
 			} else {
 				set_menu(false);
 			}
 		} else if (pm_page == 0 && (kDown & (KEY_DUP | KEY_DDOWN))) {
-			pm_focus = (pm_focus + ((kDown & KEY_DDOWN) ? 1 : n - 1)) % n;
+			for (int k = 0; k < n; k++) {    // greyed entries are stepped over
+				pm_focus = (pm_focus + ((kDown & KEY_DDOWN) ? 1 : n - 1)) % n;
+				if (!pm_disabled(pm_focus)) {
+					break;
+				}
+			}
 		} else if (pm_page != 0 && (kDown & (KEY_DLEFT | KEY_DRIGHT | KEY_DUP | KEY_DDOWN))) {
 			pm_focus = 1 - pm_focus;
 		} else if (kDown & KEY_A) {
@@ -2292,7 +2410,26 @@ extern "C" u32 N3DS_KeyHook(u32 kDown, u32 kHeld) {
 		menu_dirty    = true;
 		overlay_dirty = true;
 		last_draw     = 0;
-		return taken | (kDown & (KEY_DUP | KEY_DDOWN | KEY_DLEFT | KEY_DRIGHT | KEY_A | KEY_B | KEY_START));
+		// EXULT-Q5: the menu takes every button (X, Y, R, ZR and SELECT used to reach the game)
+		return taken | (kDown & ~static_cast<u32>(KEY_TOUCH));
+	}
+	// SELECT (quicksave) and L+SELECT (quick-restore) are keys sent to the game: a talk or an
+	// open book would take them as "continue". L+SELECT throws away everything since the last
+	// quicksave, so it asks first (focus on NO).
+	if ((kDown & KEY_SELECT) && help_page < 0) {
+		if (modal_busy() != 0) {
+			map_msg       = modal_busy() == 2 ? "Close the book first" : "Finish the talk first";
+			map_msg_until = SDL_GetTicks() + 3000;
+			last_draw     = 0;
+			return taken | KEY_SELECT;
+		}
+		if (l) {
+			click3ds::play();
+			pm_show();
+			pm_page  = 3;
+			pm_focus = 1;    // NO
+			return taken | KEY_SELECT;
+		}
 	}
 	if ((kDown & KEY_START) && !l && help_page < 0) {
 		click3ds::play();
@@ -2381,7 +2518,8 @@ extern "C" u32 N3DS_KeyHook(u32 kDown, u32 kHeld) {
 			open_guide(false);
 		}
 		last_draw = 0;
-		taken |= kDown & (KEY_DUP | KEY_DDOWN | KEY_DLEFT | KEY_DRIGHT | KEY_B | KEY_START | KEY_R | KEY_L);
+		// EXULT-Q5: while reading, every button belongs to the manual
+		taken |= kDown & ~static_cast<u32>(KEY_TOUCH | KEY_ZL);
 	} else if (menu_open && (kDown & (KEY_B | KEY_START))) {
 		set_menu(false);
 		taken |= kDown & (KEY_B | KEY_START);
@@ -2426,6 +2564,7 @@ void n3ds_bottom_tick() {
 	const uint64_t now = SDL_GetTicks();
 	if (!in_game) {
 		in_game = true;
+		n3ds_frontend_loading_done();
 		unsigned long       cached_kb = 0;
 		const unsigned long read_kb   = n3ds_cache_report(&cached_kb);
 		std::printf("[exult-3ds] in game: %.1f MB read whole from SD, %.1f MB cached, heap used %d MB\n",
@@ -2602,12 +2741,16 @@ void n3ds_bottom_tick() {
 		if (next_autosave == 0) {
 			next_autosave = now + N3DS_AUTOSAVE_MS;
 		}
-		Gump_manager* gm   = gwin->get_gump_man();
-		const bool    idle = !(conv && conv->are_choices_active()) && !(gm && gm->showing_gumps()) && !gwin->in_combat();
-		if (now >= next_autosave && idle) {
-			push_key(SDLK_S, SDL_KMOD_LCTRL);
-			next_autosave = now + N3DS_AUTOSAVE_MS;
-			std::printf("[exult-3ds] autosave\n");
+		// EXULT-Q4: the same idle test as the exit save (a line of talk on screen counts as busy:
+		// the key would be eaten as "continue"); when busy, try again in 30 s, not in 15 minutes.
+		if (now >= next_autosave) {
+			if (!exit_save_busy() && modal_busy() == 0) {
+				push_key(SDLK_S, SDL_KMOD_LCTRL);
+				next_autosave = now + N3DS_AUTOSAVE_MS;
+				std::printf("[exult-3ds] autosave\n");
+			} else {
+				next_autosave = now + 30000;
+			}
 		}
 	}
 
@@ -2624,8 +2767,8 @@ void n3ds_bottom_tick() {
 	Palette* pal = gwin->get_pal();
 	if (!day_pal_cached) {
 		// Use the daylight palette for the UI so it stays readable at night.
-		load_palette(gwin);
-		day_pal_cached = pal->get_palette_index() == 0 && pal->get_brightness() == 100;
+		load_palette(gwin);    // sets day_pal_cached itself when it could read palette 0 from the file
+		day_pal_cached = day_pal_cached || (pal->get_palette_index() == 0 && pal->get_brightness() == 100);
 	}
 	if (!buf) {
 		buf = new Image_buffer8(MAX_PW, H);
