@@ -1599,7 +1599,7 @@ namespace {
 	bool pm_cant_save = false;   // page 2: true = unsafe moment (talk, fight, open window), false = write failed
 	int  pm_focus = 0;
 	enum { PM_RESUME, PM_MANUAL, PM_SAVE, PM_OPTIONS, PM_COMMANDS, PM_LEFTY, PM_EXIT, PM_COUNT };
-	const char* const pm_labels[PM_COUNT] = {"RESUME", "MANUAL", "SAVE / LOAD", "GAME OPTIONS", "COMMANDS", "", "EXIT GAME"};
+	const char* const pm_labels[PM_COUNT] = {"RESUME", "MANUAL", "SAVE / LOAD", "OPTIONS", "COMMANDS", "", "EXIT GAME"};
 
 	int pm_count() {
 		return pm_page == 0 ? PM_COUNT : 2;
@@ -1615,7 +1615,7 @@ namespace {
 		}
 	}
 
-	// EXULT-Q1 / X5: SAVE / LOAD and GAME OPTIONS send a key to the game. During a talk, or
+	// EXULT-Q1 / X5: SAVE / LOAD and OPTIONS send a key to the game. During a talk, or
 	// while a book or sign is open, the game takes any key as "continue": a line was skipped
 	// unread and no window opened. They are greyed then, with the reason on the button.
 	bool pm_disabled(int i) {

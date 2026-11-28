@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-27
+
+- START menu: GAME OPTIONS is now called OPTIONS, the name the other 3DS ports use (cross-port pass). It opens the same Exult game menu. SAVE / LOAD stays one row: Exult's own save screen does both.
+
 ## 2026-11-22
 
 - New Game asks before it replaces a game in progress (starts on NO), and the old game is kept as a save called "Before new game" (Load Game brings it back).

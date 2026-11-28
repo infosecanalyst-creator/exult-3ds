@@ -74,7 +74,7 @@ Small things are easier to hit zoomed in: press L+R (see Zoom, 3D and swapping).
 | ZL | Swap the screens (any time)
 | L+R | Zoom the touchscreen: 1.5x, 2x, normal
 | ZR | Target mode
-| START | Menu: resume, manual, save / load, game options, commands, left hand, exit game
+| START | Menu: resume, manual, save / load, options, commands, left hand, exit game
 | SELECT | Quicksave
 | L+Y | This manual
 | L+SELECT | Quick-restore (asks first)
@@ -84,7 +84,7 @@ Small things are easier to hit zoomed in: press L+R (see Zoom, 3D and swapping).
 
 While the START menu or this manual is open, the buttons and sticks belong to it; nothing reaches the game.
 
-During a conversation, or while a book or sign is open, SAVE / LOAD and GAME OPTIONS in the START menu are greyed ("finish the talk first"): finish, then open them. SELECT does nothing then either.
+During a conversation, or while a book or sign is open, SAVE / LOAD and OPTIONS in the START menu are greyed ("finish the talk first"): finish, then open them. SELECT does nothing then either.
 
 # The menu button
 The three bars in the top-right corner of the touchscreen open the menu.
